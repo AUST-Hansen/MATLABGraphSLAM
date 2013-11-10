@@ -1,4 +1,4 @@
-function [measurementTimestamps, rangeMeasurements, c_i_t] = cleanMeasurements(timeSteps,multibeam,multibeamData,useMultibeam,imagenex,imagenexData,useImagenex,dvl,dvlData,useDVL)
+function [measurementTimestamps, rangeMeasurements, c_i_t] = cleanMeasurements(timeSteps,multibeam,multibeamData,useMultibeam,imagenex,imagenexData,useImagenex,dvl,dvlData,useDVL,rangeSkip)
 
    N = length(dvlData);
    % each column of rangeMeasurements is [range bearing elevation]' 
@@ -10,7 +10,7 @@ function [measurementTimestamps, rangeMeasurements, c_i_t] = cleanMeasurements(t
        correspondenceCounter = 1;
        % check multibeam
        if (useMultibeam)
-       for jj = 1:multibeam.numBeams
+       for jj = 1:rangeSkip:multibeam.numBeams
                   % rotation from beam frame to sensor frame
           S_R_B       = [ cos(multibeam.az(jj))  , -sin(multibeam.az(jj)), 0   ;
                           sin(multibeam.az(jj))  , cos(multibeam.az(jj)), 0   ;
@@ -31,7 +31,7 @@ function [measurementTimestamps, rangeMeasurements, c_i_t] = cleanMeasurements(t
        end
        
        if(useImagenex)
-       for jj = 1:imagenex.numBeams
+       for jj = 1:rangeSkip:imagenex.numBeams
                   % rotation from beam frame to sensor frame
           S_R_B       = [ cos(imagenex.az(jj))  , -sin(imagenex.az(jj)), 0   ;
                           sin(imagenex.az(jj))  , cos(imagenex.az(jj)), 0   ;
@@ -81,6 +81,9 @@ end
         
         range = norm(vector);
         bearing = atan2(vector(2),vector(1));
+        if (bearing < 0) % want bearings to be compass bearings
+           bearing = bearing+2*pi; 
+        end
         elevation = asin(-vector(3)/(range+eps));
         
     end
