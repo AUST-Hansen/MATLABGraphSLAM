@@ -19,12 +19,14 @@ filename = 'RandomTrajectories/WallFollowingTraj2.mat';
 % range data, to allow a sparser map of observed features.
 startIdx = 1; % for now, this must be 1
 skip = 1;     % for now, this must be 1 also
-rangeSkip = 10;
+rangeSkip = 6;
 endIdx = 1000;
 stateSize = 6;
 % Imagenex matching parameters
 ignx_sparsity = 3;
-scanmatch_threshold = 30;
+scanmatch_threshold = 25; % only look for matches within this many meters of pose difference
+scanmatch_RMStolerance = 5;
+scanmatch_probThreshold = 1.5; 
 % Use imagenex, multibeam and DVL ranges in observations?
 useDVLRanges = false;
 useMultibeamRanges = false;
@@ -38,6 +40,7 @@ load(filename)
 fprintf('Processing "Truth" data...\n')
 fprintf('Imagenex...\n')
 [trueIgnxCloud, xVehBergframe] = reconstructTrueCloud(x_obs_t_true(:,startIdx:skip:endIdx),euler_obs_t(:,startIdx:skip:endIdx),x_berg_cm_t(:,startIdx:skip:endIdx),euler_berg_t(:,startIdx:skip:endIdx),imagenex,imagenexData(:,startIdx:skip:endIdx));
+trueIgnxCloud = trueIgnxCloud - repmat(x_obs_t_true(:,1),1,size(trueIgnxCloud,2));
 fprintf('Reson...\n')
 [trueBergShape,~] = reconstructTrueCloud(x_obs_t_true(:,startIdx:skip:endIdx),euler_obs_t(:,startIdx:skip:endIdx),x_berg_cm_t(:,startIdx:skip:endIdx),euler_berg_t(:,startIdx:skip:endIdx),sensor,truthrangeData(:,startIdx:skip:endIdx));
 %% Clean data of bogus ranges %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -84,10 +87,32 @@ hold on
 axis equal
 plot(-stateHist(2,:),stateHist(1,:),'r')
 plot(xVehBergframe(1,:) - xVehBergframe(1,1)  ,xVehBergframe(2,:) - xVehBergframe(2,1),'g')
+scatter(trueIgnxCloud(1,:),trueIgnxCloud(2,:),ones(1,size(trueIgnxCloud,2)),'g')
 scatter(-initialMapEstimate(2,:),initialMapEstimate(1,:),ones(1,size(initialMapEstimate,2)),'b')
-scatter(-mapEsts(2,:),mapEsts(1,:),ones(1,size(mapEsts,2)),'k')
-legend('initial estimate','after being pushed through information form','truth')
+scatter(-mapEsts(2,:),mapEsts(1,:),ones(1,size(mapEsts,2)),'r')
+%legend('initial estimate','after being pushed through information form','truth')
 title('estimated path')
+%% visualizing icp stuff
+% first two scans
+% figure;
+% scatter(initialMapEstimate(1,c_i_t(c_i_t(:,1)~=-17,1)),initialMapEstimate(2,c_i_t(c_i_t(:,1)~=-17,1)),'r')
+% hold on; axis equal;
+% scatter(initialMapEstimate(1,c_i_t(c_i_t(:,20)~=-17,20)),initialMapEstimate(2,c_i_t(c_i_t(:,20)~=-17,20)),'b')
+% title('scans 1 and 20')
+% figure;
+% scatter(initialMapEstimate(1,c_i_t(c_i_t(:,end-20)~=-17,end-20)),initialMapEstimate(2,c_i_t(c_i_t(:,end-20)~=-17,end-20)),'r')
+% hold on; axis equal;
+% scatter(initialMapEstimate(1,c_i_t(c_i_t(:,end)~=-17,end)),initialMapEstimate(2,c_i_t(c_i_t(:,end)~=-17,end)),'b')
+% title('scans end-20 and end')
+%%
+% qICP = initialMapEstimate(:,c_i_t(c_i_t(:,end-20)~=-17,end-20));
+% pICP = initialMapEstimate(:,c_i_t(c_i_t(:,end)~=-17,end));
+% [R,T,ERR] = icp(qICP,pICP,'twoDee',false);
+% figure;
+% pNew = R*pICP + repmat(T,1,size(pICP,2));
+% scatter(qICP(1,:),qICP(2,:),'r')
+% hold on; axis equal;
+% scatter(pNew(1,:),pNew(2,:),'b')
 %% Reduce graph by marginalizing 
 fprintf('Reducing...\n')
 [OmegaReduced,zetaReduced] = GraphSLAM_reduce(timeSteps(startIdx:endIdx),stateSize,Omega,zeta);
@@ -102,26 +127,43 @@ fprintf('Reducing...\n')
 fprintf('Solving...\n')
 [mu, Sigma] = GraphSLAM_solve(OmegaReduced,zetaReduced,Omega,zeta);
 % Timeout counter for main loop
+%%
 itimeout = 0;
-MAX_ITER = 2000;
+MAX_ITER = 1;
 while (itimeout < MAX_ITER) 
     
     % Test correspondences for imagenex scan matching.
-    for ii = 1:ignx_sparsity:endIdxtimeSteps
-       for jj = ii+ignx_sparsity:ignx_sparsity:endIdxtimeSteps 
-           % limit radius of net you cast
-           if (norm(mu(1:2,ii) - mu(1:2,jj)) < scanmatch_threshold)
-              [validMatch, deltaPose] = correlateImagenex(mu(:,ii),mu(:,jj),imagenexData(ii,:),imagenexData(jj,:),imagenex);
-              % if good match, draw link between two
-           end
-       end
+    c_i_t_last = c_i_t;
+    [c_i_t] = GraphSLAMcorrespondenceViaScanMatch(mu,c_i_t,scanmatch_threshold,scanmatch_probThreshold,scanmatch_RMStolerance);
+    % linearize
+    fprintf('Linearizing...\n')
+    clear Omega
+    [Omega,zeta] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,c_i_t,mu);
+    % reduce
+    spy(Omega); drawnow;
+    fprintf('Reducing...\n')
+    %[OmegaReduced,zetaReduced] = GraphSLAM_reduce(timeSteps(startIdx:endIdx),stateSize,Omega,zeta);
+    % solve
+    fprintf('Solving...\n')
+    %[mu, Sigma] = GraphSLAM_solve(OmegaReduced,zetaReduced,Omega,zeta);
+    
+    if (sum(sum(c_i_t - c_i_t_last)) == 0)
+        fprintf('No new correspondences detected! Exiting loop...\n');
+        break;
     end
-    
-    
-    
-    
    itimeout=itimeout+1 ;
    fprintf('%d iterations completed...\n',itimeout)
 end
 
-
+%stateHist = reshape(Omega(1:endIdx*6,1:endIdx*6)\zeta(1:endIdx*6),6,[]);
+%% 
+spy(Omega(1:10000,1:10000)); drawnow;
+mu = Omega\zeta;
+state = mu;
+stateHist = reshape(state(1:6*endIdx),6,[]);
+mapEsts = reshape(state(6*endIdx+1:end),3,[]);
+figure(2)
+plot(-stateHist(2,:),stateHist(1,:),'k')
+scatter(-mapEsts(2,:),mapEsts(1,:),ones(1,size(mapEsts,2)),'k')
+legend('initial estimate','after being pushed through information form','truth','after one iteration of correspondence')
+title('estimated path')
