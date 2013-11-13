@@ -6,19 +6,26 @@ function [OmegaTilde,zetaTilde] = GraphSLAM_reduce(timeStamps,stateSize,Omega,ze
    OmegaTilde = Omega(1:lastStateIdx,1:lastStateIdx);
    zetaTilde = zeta(1:lastStateIdx);
 
-   for jj = 1:nMapFeatures
 
-       OmegaTilde = OmegaTilde - sparse(Omega(1:lastStateIdx,lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj)*...
-                                 (Omega(lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj,lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj)\...
-                                 Omega(lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj,1:lastStateIdx)));
-       zetaTilde = zetaTilde - Omega(1:lastStateIdx,lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj)*...
-                                 (Omega(lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj,lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj)\...
-                                 zeta(lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj));
-       Omega(lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj,lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj);   
+   for jj = 1:nMapFeatures
        
-       % Visualize progress
-       if(mod(jj,100) == 0)
-           fprintf('%d of %d\n',jj,nMapFeatures)
-       end
+       OmegaTilde = OmegaTilde - sparse(Omega(1:lastStateIdx,lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj)*...
+           (Omega(lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj,lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj)\...
+           Omega(lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj,1:lastStateIdx)));
+       
+       Omega(lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj,lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj)
+       
+       zetaTilde = zetaTilde - Omega(1:lastStateIdx,lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj)*...
+           (Omega(lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj,lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj)\...
+           zeta(lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj));
+       
+       Omega(lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj,lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj)
+       
+       Omega(lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj,lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj);
+       
    end
-  
+   % Visualize progress
+   if(mod(jj,100) == 0)
+       fprintf('%d of %d\n',jj,nMapFeatures)
+   end
+end

@@ -19,12 +19,13 @@ filename = 'RandomTrajectories/WallFollowingTraj2.mat';
 % range data, to allow a sparser map of observed features.
 startIdx = 1; % for now, this must be 1
 skip = 1;     % for now, this must be 1 also
-rangeSkip = 6;
-endIdx = 1000;
+rangeSkip = 4;
+poseSkip = 5;
+endIdx = 800;
 stateSize = 6;
 % Imagenex matching parameters
 ignx_sparsity = 3;
-scanmatch_threshold = 25; % only look for matches within this many meters of pose difference
+scanmatch_threshold = 15; % only look for matches within this many meters of pose difference
 scanmatch_RMStolerance = 5;
 scanmatch_probThreshold = 1.5; 
 % Use imagenex, multibeam and DVL ranges in observations?
@@ -50,7 +51,7 @@ fprintf('Reson...\n')
 % integrate high rate pose data but not deal with as many map features if
 % we don't want to.
 fprintf('Cleaning and formatting data...\n')
-[measurementTimestamps, rangeMeasurements, c_i_t] = cleanMeasurements(timeSteps(1:skip:endIdx),sensor,rangeData(:,startIdx:skip:endIdx),useMultibeamRanges,imagenex,imagenexData(:,startIdx:skip:endIdx),useImagenexData,dvl,dvlData(startIdx:skip:endIdx),useDVLRanges,rangeSkip);
+[measurementTimestamps, rangeMeasurements, c_i_t] = cleanMeasurements(timeSteps(1:skip:endIdx),sensor,rangeData(:,startIdx:skip:endIdx),useMultibeamRanges,imagenex,imagenexData(:,startIdx:skip:endIdx),useImagenexData,dvl,dvlData(startIdx:skip:endIdx),useDVLRanges,rangeSkip,poseSkip);
 %--------------------------------------------------------------------------
 %% Form input vectors  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Extract angular velocity of vehicle in inertial as a control input
@@ -65,14 +66,14 @@ inputs = [v_commanded; omega_vehicle];
 %% Run GraphSLAM
 fprintf('Begin GraphSLAM...\n')
 fprintf('Initializing...\n')
-initialPsiDotGuess = .00;
+initialPsiDotGuess = .0035;
 initialStateEstimate = GraphSLAM_initialize(timeSteps(startIdx:endIdx),inputs,initialPsiDotGuess);
 fprintf('Initializing Map Features...\n')
 initialMapEstimate = GraphSLAM_initializeMap(initialStateEstimate,rangeMeasurements,c_i_t);
 initialFullStateEstimate = [reshape(initialStateEstimate,[],1); reshape(initialMapEstimate,[],1)];
 %% Calculate inzformation form of full posterior
 fprintf('Linearizing...\n')
-[Omega,zeta] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,c_i_t,initialFullStateEstimate);
+[Omega,zeta] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,c_i_t,initialFullStateEstimate,false);
 %% initial testing stuff
 %stateHist = reshape(Omega(1:endIdx*6,1:endIdx*6)\zeta(1:endIdx*6),6,[]);
 figure(1);
@@ -92,6 +93,7 @@ scatter(-initialMapEstimate(2,:),initialMapEstimate(1,:),ones(1,size(initialMapE
 scatter(-mapEsts(2,:),mapEsts(1,:),ones(1,size(mapEsts,2)),'r')
 %legend('initial estimate','after being pushed through information form','truth')
 title('estimated path')
+drawnow;
 %% visualizing icp stuff
 % first two scans
 % figure;
@@ -129,7 +131,8 @@ fprintf('Solving...\n')
 % Timeout counter for main loop
 %%
 itimeout = 0;
-MAX_ITER = 1;
+MAX_ITER = 20;
+DEBUGflag = true;
 while (itimeout < MAX_ITER) 
     
     % Test correspondences for imagenex scan matching.
@@ -138,14 +141,15 @@ while (itimeout < MAX_ITER)
     % linearize
     fprintf('Linearizing...\n')
     clear Omega
-    [Omega,zeta] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,c_i_t,mu);
+    clear Sigma
+    [Omega,zeta,c_i_t] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,c_i_t,mu,true);
     % reduce
-    spy(Omega); drawnow;
+%%
     fprintf('Reducing...\n')
-    %[OmegaReduced,zetaReduced] = GraphSLAM_reduce(timeSteps(startIdx:endIdx),stateSize,Omega,zeta);
+    [OmegaReduced,zetaReduced] = GraphSLAM_reduce(timeSteps(startIdx:endIdx),stateSize,Omega,zeta);
     % solve
     fprintf('Solving...\n')
-    %[mu, Sigma] = GraphSLAM_solve(OmegaReduced,zetaReduced,Omega,zeta);
+    [mu, Sigma] = GraphSLAM_solve(OmegaReduced,zetaReduced,Omega,zeta);
     
     if (sum(sum(c_i_t - c_i_t_last)) == 0)
         fprintf('No new correspondences detected! Exiting loop...\n');
@@ -153,17 +157,39 @@ while (itimeout < MAX_ITER)
     end
    itimeout=itimeout+1 ;
    fprintf('%d iterations completed...\n',itimeout)
+   
+   if (DEBUGflag)
+       
+      figure(3)
+        plot(xVehBergframe(1,:) - xVehBergframe(1,1)  ,xVehBergframe(2,:) - xVehBergframe(2,1),'g')
+        hold on
+        axis equal
+        stateHist = reshape(mu(1:6*endIdx),6,[]);
+        mapEsts = reshape(mu(6*endIdx+1:end),3,[]);
+        colorz = 'rbkcy';
+        plot(-stateHist(2,:),stateHist(1,:),colorz(itimeout))
+        inx = unique(c_i_t)
+        scatter(-mapEsts(2,inx(2:end)),mapEsts(1,inx(2:end)))
+       drawnow()
+       keyboard;
+   end
+   
 end
 
 %stateHist = reshape(Omega(1:endIdx*6,1:endIdx*6)\zeta(1:endIdx*6),6,[]);
 %% 
-spy(Omega(1:10000,1:10000)); drawnow;
+figure(3)
+%spy(Omega(1:10000,1:10000)); drawnow;
 mu = Omega\zeta;
+%%
 state = mu;
+save('OmegaAndZeta.mat','Omega','zeta');
+clear Omega;
+clear zeta;
 stateHist = reshape(state(1:6*endIdx),6,[]);
 mapEsts = reshape(state(6*endIdx+1:end),3,[]);
 figure(2)
 plot(-stateHist(2,:),stateHist(1,:),'k')
-scatter(-mapEsts(2,:),mapEsts(1,:),ones(1,size(mapEsts,2)),'k')
+%scatter(-mapEsts(2,:),mapEsts(1,:),ones(1,size(mapEsts,2)),'k')
 legend('initial estimate','after being pushed through information form','truth','after one iteration of correspondence')
 title('estimated path')

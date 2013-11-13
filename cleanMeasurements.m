@@ -1,12 +1,14 @@
-function [measurementTimestamps, rangeMeasurements, c_i_t] = cleanMeasurements(timeSteps,multibeam,multibeamData,useMultibeam,imagenex,imagenexData,useImagenex,dvl,dvlData,useDVL,rangeSkip)
+function [measurementTimestamps, rangeMeasurements, c_i_t] = cleanMeasurements(timeSteps,multibeam,multibeamData,useMultibeam,imagenex,imagenexData,useImagenex,dvl,dvlData,useDVL,rangeSkip,poseSkip)
 
+   % rangeSkip gives density in beams
+   % poseSkip gives how long to wait between imagenex for matching.
    N = length(dvlData);
    % each column of rangeMeasurements is [range bearing elevation]' 
    rangeMeasurements = zeros(3,N*(multibeam.numBeams + imagenex.numBeams + dvl.numBeams));
    c_i_t = -17*ones((multibeam.numBeams + imagenex.numBeams + dvl.numBeams),N);
    j_validMeas = 0;
    % for each timestep
-   for i_time = 1:N
+   for i_time = 1:poseSkip:N
        correspondenceCounter = 1;
        % check multibeam
        if (useMultibeam)
