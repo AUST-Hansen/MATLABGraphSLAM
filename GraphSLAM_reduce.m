@@ -13,15 +13,14 @@ function [OmegaTilde,zetaTilde] = GraphSLAM_reduce(timeStamps,stateSize,Omega,ze
            (Omega(lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj,lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj)\...
            Omega(lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj,1:lastStateIdx)));
        
-       Omega(lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj,lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj)
+       Omega(lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj,lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj);
        
        zetaTilde = zetaTilde - Omega(1:lastStateIdx,lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj)*...
            (Omega(lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj,lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj)\...
            zeta(lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj));
        
-       Omega(lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj,lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj)
+       zeta(lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj);
        
-       Omega(lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj,lastStateIdx+3*(jj-1) + 1:lastStateIdx+3*jj);
        
    end
    % Visualize progress

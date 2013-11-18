@@ -5,7 +5,7 @@ stateSize = 6;
 NmapObservations = size(rangeMeasurements,2);
 remainingFeatures = unique(correspondences);
 remainingFeatures = remainingFeatures(2:end);
-NmapFeatures = length(remainingFeatures);
+NmapFeatures = NmapObservations;
 stateEstimate = reshape(fullStateEstimate(1:stateSize*Nstates),stateSize,[]);
 mapEstimate = reshape(fullStateEstimate(stateSize*Nstates+1:end),3,[]);
 % state has position, velocity, and heading info, as well as berg omega
@@ -18,24 +18,27 @@ Omega(2,2) = 1e13;
 Omega(3,3) = 1;
 Omega(4,4) = 1;
 Omega(5,5) = 1e13;
-Omega(6,6) = 1;
+Omega(6,6) = 1000;
 % ininitialize zeta
 zeta = zeros(stateSize*Nstates + 3*NmapFeatures,1);
 zeta(1:6) = [0 0 inputs(1,1) 0 0 fullStateEstimate(6)]';
 xhat = zeros(stateSize,1);
 G = zeros(stateSize);
 velocityDamping = .1;
-processNoise = diag([.0001,.0001,.001,.001,.00001,.000001]);
+processNoise = diag([.0001,.0001,.0001,.0001,.000001,1e-10]);
 
 %% Motion model
 for ii = 1:Nstates-1
     dT = (timeStamps(ii+1) - timeStamps(ii));
     heading = stateEstimate(5,ii);
     berg_R_veh = [cos(heading), -sin(heading); sin(heading), cos(heading)];
-    xhat(1:2) = eye(2)*stateEstimate(1:2,ii) + berg_R_veh*stateEstimate(3:4,ii)*dT; % update position
-    xhat(3:4) = .0*stateEstimate(3:4,ii) + 1*[inputs(1,ii); 0];
-    xhat(5) = stateEstimate(5,ii) + (inputs(2,ii) - stateEstimate(6,ii))*dT;
-    xhat(6) = stateEstimate(6,ii);
+    %xhat(1:2) = eye(2)*stateEstimate(1:2,ii) + berg_R_veh*stateEstimate(3:4,ii)*dT; % update position
+    %xhat(3:4) = .0*stateEstimate(3:4,ii) + 1*[inputs(1,ii); 0];
+    %xhat(5) = stateEstimate(5,ii) + (inputs(2,ii) - stateEstimate(6,ii))*dT;
+    %xhat(6) = stateEstimate(6,ii);
+    
+    [~, xHat] = ode45(@dStateDt,[0 dT],[stateEstimate(:,ii);inputs(:,ii)]);
+    xhat = xHat(end,1:6)';
     
     G(1:2,1:2) = eye(2);
     G(1:2,3:4) = berg_R_veh*dT;
@@ -57,47 +60,46 @@ FeatureIndices = unique(correspondences);
 FeatureIndices = FeatureIndices(2:end); % remove -17
 counter = 0;
 for mapFeatureIterator = 1:NmapFeatures;
-    j = FeatureIndices(mapFeatureIterator);
+    j = mapFeatureIterator;%FeatureIndices(mapFeatureIterator);
     [j_s,i_s] = find(correspondences == j);
     for idummy = 1:length(i_s)
         ii = i_s(idummy);
         jj = j_s(idummy);
+        B_R_V = Euler2RotMat(0,0,stateEstimate(5,ii)); 
         if(correspondences(jj,ii) == j)
-            delta = mapEstimate(:,j) - [stateEstimate(1:2,ii); 0] + [0 0 eps]'; % switch sign!!!!!!!!!!!!!!!!!!!!
-            q = delta'*delta;
-            sqrtQ = sqrt(q)+eps;
-            Qrange = diag([.0001+(sqrtQ*sensor.beamSigmaPercentageOfRange)^2, .01, .01]);
-            Qinv = inv(Qrange);
-            bearingHat = atan2(delta(2),delta(1));
-            if bearingHat < 0
-                bearingHat = bearingHat + 2*pi;
-            end
-            currentHeading = stateEstimate(5,ii);
-%             while(currentHeading > 2*pi)
-%                 currentHeading = currentHeading - 2*pi;
-%             end
-%             while(currentHeading < 0)
-%                 currentHeading = currentHeading + 2*pi;
-%             end
-            expBearing = bearingHat - currentHeading;
-%             while (expBearing >= 2*pi)
-%                 expBearing = expBearing - 2*pi;
+            expectedMeasurement = B_R_V'*(mapEstimate(:,j) - [stateEstimate(1:2,ii); 0] + [0 0 eps]') ;
+            sigmaParallel = sensor.beamSigmaPercentageOfRange*norm(rangeMeasurements(:,j));
+            QrangeBeamframe = 10*diag([sigmaParallel^2, 1/10*sigmaParallel^2 , 1/10*sigmaParallel^2]);
+            vec1 = rangeMeasurements(:,j)/norm(rangeMeasurements(:,j));
+            vec2 = [-(vec1(2)+vec1(3))/(vec1(1)+eps); 1; 1];
+            vec2 = vec2/norm(vec2);
+            vec3 = cross(vec1,vec2);
+            RCov = [vec1 vec2 vec3]';
+            
+            Qinv = inv(RCov'*QrangeBeamframe*RCov);
+            
 %             end
 %             while (expBearing <= 0)
 %                 expBearing = expBearing + 2*pi;
 %             end
-            zHat = [sqrtQ; expBearing; asin(delta(3)/sqrtQ)];
+
+            xDiff = mapEstimate(1:2,j) - stateEstimate(1:2,ii);
+            zHat = expectedMeasurement;
             zMeas = rangeMeasurements(:,j);
             zDiff = zMeas - zHat;
+            cTheta = B_R_V(1,1);
+            sTheta = B_R_V(2,1);
             %[zHat zMeas zDiff]
-            if(zDiff(2) < -pi)
-                zDiff(2) = zDiff(2) + 2*pi;
-            elseif (zDiff(2) > pi)
-                zDiff(2) = zDiff(2) - 2*pi;
-            end
-            H = 1/q*[-delta(1) -delta(2) 0 0 0 0 delta(1) delta(2) delta(3);...
-                delta(2) -delta(1) 0 0 -q 0 -delta(2) delta(1)  0;...
-                0 0 0 0 0 0 0 0 1/sqrt(1-(delta(3)/sqrtQ)^2)*(2*delta(3)) ];
+            
+            H = [-cTheta, -sTheta, 0, 0, -xDiff(1)*sTheta+xDiff(2)*cTheta, 0, cTheta, sTheta, 0;...
+                sTheta, -cTheta, 0, 0, -xDiff(1)*cTheta-xDiff(2)*sTheta, 0, -sTheta, cTheta, 0;...
+                0,0,0,0,0,0,0,0,1];
+            %H = [cTheta, sTheta, 0, 0, xDiff(1)*sTheta-xDiff(2)*cTheta, 0, -cTheta, -sTheta, 0;...
+            %    -sTheta, cTheta, 0, 0, xDiff(1)*cTheta+xDiff(2)*sTheta, 0, sTheta, -cTheta, 0;...
+            %    0,0,0,0,0,0,0,0,1];
+            %H = [-cTheta, -sTheta, 0, 0, 0, 0, cTheta, sTheta, 0;...
+            %      sTheta, -cTheta, 0, 0, 0, 0, -sTheta, cTheta, 0;...
+            %      0,0,0,0,0,0,0,0,1];
             %           Hx = 1/q*[-sqrtQ*delta(1) -sqrtQ*delta(2) 0 0 0 0;...
             %                    delta(2) -delta(1) 0 0 -q 0 ;...
             %                    0 0 0 0 0 0];
@@ -136,14 +138,14 @@ for mapFeatureIterator = 1:NmapFeatures;
         
         % Handle dvl measurements
         dvlMeas = dvlReadings(ii) ;
-        Qdvl = .0001;
+        Qdvl = .00001;
         for jDvl = 1:dvl.numBeams
             if(~isnan(dvlMeas.ranges(jDvl))) % valid return
                 
                 Hdvl_j = [0 0 dvl.beamsVF(1:2,jDvl)' 0 0];
                 zMeasDVL = -dvlMeas.normalVelocity(jDvl);
                 zHatDVL = Hdvl_j*stateEstimate(:,ii);
-                CovAdd = 1/Qdvl*Hdvl_j'*Hdvl_j;
+                CovAdd = 1/Qdvl*(Hdvl_j'*Hdvl_j);
                 zetaAdd = 1/Qdvl*Hdvl_j'*(zMeasDVL - zHatDVL + Hdvl_j*stateEstimate(:,ii)); % I think this is right, because the dvl meas fxn is linear.
                 Omega((ii-1)*stateSize+1:(ii)*stateSize,(ii-1)*stateSize+1:(ii)*stateSize) = ... %self
                     sparse(Omega((ii-1)*stateSize+1:(ii)*stateSize,(ii-1)*stateSize+1:(ii)*stateSize)...
@@ -159,30 +161,73 @@ for mapFeatureIterator = 1:NmapFeatures;
     end
     counter = counter+1;
     
-    c_i_t_new = correspondences;
+
+    
+    
+end
+c_i_t_new = correspondences;
+
+
+for ii = 1:Nstates
+    % Handle dvl measurements
+    % and penalize large iceberg angular velocities
+    
+    %% omega:
+    % initial idea: 2*sigma = .01, so sigma = .005. 1/.005^2 = 40000
+    penalty = 40000; % 1/covariance of expected measurement
+    % Penalize large omega
+    Homega = [0 0 0 0 0 1];
+    zMeasOmega = stateEstimate(6,ii);
+    zExpOmega = 0;
+    Omega(ii*stateSize,ii*stateSize) = Omega(ii*stateSize,ii*stateSize) + penalty;
+    zeta(ii*stateSize-5:ii*stateSize) = zeta(ii*stateSize-5:ii*stateSize) + penalty*Homega'*(zMeasOmega - zExpOmega + Homega*stateEstimate(:,ii));
+    %% dvl
+    dvlMeas = dvlReadings(ii) ;
+    Qdvl = .00001;
+    for jDvl = 1:dvl.numBeams
+        if(~isnan(dvlMeas.ranges(jDvl))) % valid return
+            
+            Hdvl_j = [0 0 dvl.beamsVF(1:2,jDvl)' 0 0];
+            zMeasDVL = -dvlMeas.normalVelocity(jDvl);
+            zHatDVL = Hdvl_j*stateEstimate(:,ii);
+            CovAdd = 1/Qdvl*(Hdvl_j'*Hdvl_j);
+            zetaAdd = 1/Qdvl*Hdvl_j'*(zMeasDVL - zHatDVL + Hdvl_j*stateEstimate(:,ii)); % I think this is right, because the dvl meas fxn is linear.
+            Omega((ii-1)*stateSize+1:(ii)*stateSize,(ii-1)*stateSize+1:(ii)*stateSize) = ... %self
+                    sparse(Omega((ii-1)*stateSize+1:(ii)*stateSize,(ii-1)*stateSize+1:(ii)*stateSize)...
+                    + CovAdd);
+                zeta((ii-1)*stateSize+1:(ii)*stateSize) = zeta((ii-1)*stateSize+1:(ii)*stateSize) +...
+                    + zetaAdd;
+            end
+        end 
     
     
 end
 
-if(haveInitialized)
-    for jjj = 1:length(remainingFeatures)
+% if(haveInitialized)
+%     for jjj = 1:length(remainingFeatures)
+%         
+%         c_i_t_new(correspondences==remainingFeatures(jjj)) = jjj;
+%         if(mod(jjj,50))
+%             fprintf('%d\n',jjj)
+%         end
+%     end
+% end
+
+end
+
+    function deriv = dStateDt(~,stateAndInputs)
         
-        c_i_t_new(correspondences==remainingFeatures(jjj)) = jjj;
-        if(mod(jjj,50))
-            fprintf('%d\n',jjj)
-        end
+        head = stateAndInputs(5);
+        R = Euler2RotMat(0,0,head);
+        b_R_v = R(1:2,1:2);
+        
+        deriv = zeros(size(stateAndInputs));
+        deriv(1:2) = b_R_v*stateAndInputs(3:4);
+        deriv(3:4) = [stateAndInputs(7); 0] - stateAndInputs(3:4);
+        deriv(5) = (stateAndInputs(8) - stateAndInputs(6));
+        deriv(6) = 0;%-.00001*stateAndInputs(6);
+        % zeros for everything else
     end
-end
-
-
-
-
-
-
-
-
-
-
 
 
 

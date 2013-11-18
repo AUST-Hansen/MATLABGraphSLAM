@@ -45,8 +45,10 @@ function [measurementTimestamps, rangeMeasurements, c_i_t] = cleanMeasurements(t
               v_R_beam = imagenex.Veh_R_sen*S_R_B;
               % rotate into vehicle frame
               beamInVehicleFrame = v_R_beam(:,1)*imagenexData(jj,i_time);
-              [r,b,elev] = getRBE(beamInVehicleFrame);
-              rangeMeasurements(:,j_validMeas) = [r,b,elev]';
+              %[r,b,elev] = getRBE(beamInVehicleFrame);
+              % changing measurement model to straight vector
+              %rangeMeasurements(:,j_validMeas) = [r,b,elev]';
+              rangeMeasurements(:,j_validMeas) = beamInVehicleFrame;
               c_i_t(correspondenceCounter,i_time) = j_validMeas;
               correspondenceCounter = correspondenceCounter+1;
           end

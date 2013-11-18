@@ -18,9 +18,9 @@ function initialMapEstimate = GraphSLAM_initializeMap(initialStateEstimate,range
               % build measurement vector in body frame
               % measurement is [range bearing elevation]'
               meas = rangeMeasurements(:,measIdx);
-              measVec = Euler2RotMat(0,0,meas(2))*Euler2RotMat(0,meas(3),0)*[meas(1);0;0];
+              
              
-              initialMapEstimate(:,jMapFeature) = x_Veh_bergframe + B_R_V*measVec;
+              initialMapEstimate(:,jMapFeature) = x_Veh_bergframe + B_R_V*meas;
               jMapFeature = jMapFeature+1;
           end
        end

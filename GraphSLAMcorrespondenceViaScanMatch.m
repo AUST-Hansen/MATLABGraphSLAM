@@ -4,7 +4,7 @@ function [c_i_t_new] = GraphSLAMcorrespondenceViaScanMatch(mu,c_i_t,posThreshold
 c_i_t_new = c_i_t;
 Nstates = size(c_i_t,2);
 stateSize = 6; % bad practice
-size(mu(stateSize*Nstates+1:end),1)/3
+size(mu(stateSize*Nstates+1:end),1)/3;
 stateHist = reshape(mu(1:stateSize*Nstates),stateSize,[]);
 mapFeatures = reshape(mu(stateSize*Nstates+1:end),3,[]);
 
@@ -32,6 +32,7 @@ for ii = 1:Nstates
             % Do KNN
             [idxKNN, dKNN]=knnsearch(pointCloud1',pNew');
             goodmatch = false;
+            ERR(end)
             for kk = 1:length(idxKNN)
                 if (ERR(end) < RMStolerance && dKNN(kk) <= probThreshold)
                     %fprintf('rms: %d\n',ERR(end));

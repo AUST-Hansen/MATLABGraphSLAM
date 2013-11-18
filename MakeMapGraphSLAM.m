@@ -10,6 +10,7 @@
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 clear all; close all; clc;
+pause on
 %% Constant parameters
 % File to read
 filename = 'RandomTrajectories/WallFollowingTraj2.mat';
@@ -19,15 +20,15 @@ filename = 'RandomTrajectories/WallFollowingTraj2.mat';
 % range data, to allow a sparser map of observed features.
 startIdx = 1; % for now, this must be 1
 skip = 1;     % for now, this must be 1 also
-rangeSkip = 4;
+rangeSkip = 3;
 poseSkip = 5;
-endIdx = 800;
+endIdx = 200;
 stateSize = 6;
 % Imagenex matching parameters
 ignx_sparsity = 3;
 scanmatch_threshold = 15; % only look for matches within this many meters of pose difference
-scanmatch_RMStolerance = 5;
-scanmatch_probThreshold = 1.5; 
+scanmatch_RMStolerance = 2;
+scanmatch_probThreshold = 3; 
 % Use imagenex, multibeam and DVL ranges in observations?
 useDVLRanges = false;
 useMultibeamRanges = false;
@@ -66,7 +67,7 @@ inputs = [v_commanded; omega_vehicle];
 %% Run GraphSLAM
 fprintf('Begin GraphSLAM...\n')
 fprintf('Initializing...\n')
-initialPsiDotGuess = .0035;
+initialPsiDotGuess = .0;%035;
 initialStateEstimate = GraphSLAM_initialize(timeSteps(startIdx:endIdx),inputs,initialPsiDotGuess);
 fprintf('Initializing Map Features...\n')
 initialMapEstimate = GraphSLAM_initializeMap(initialStateEstimate,rangeMeasurements,c_i_t);
@@ -80,7 +81,7 @@ figure(1);
 plot(timeSteps,euler_berg_t(3,:));
 title('iceberg heading')
 state = Omega\zeta;
-stateHist = reshape(state(1:6*endIdx),6,[]);
+stateHist = reshape(state(1:6*(endIdx-startIdx)),6,[]);
 mapEsts = reshape(state(6*endIdx+1:end),3,[]);
 figure(2)
 plot(-initialStateEstimate(2,:),initialStateEstimate(1,:))
@@ -117,7 +118,7 @@ drawnow;
 % scatter(pNew(1,:),pNew(2,:),'b')
 %% Reduce graph by marginalizing 
 fprintf('Reducing...\n')
-[OmegaReduced,zetaReduced] = GraphSLAM_reduce(timeSteps(startIdx:endIdx),stateSize,Omega,zeta);
+%[OmegaReduced,zetaReduced] = GraphSLAM_reduce(timeSteps(startIdx:endIdx),stateSize,Omega,zeta);
 % state2 = OmegaReduced\zetaReduced;
 % stateHist2 = reshape(state2,6,[]);
 % figure(1)
@@ -127,12 +128,14 @@ fprintf('Reducing...\n')
 % title('reduced solution')
 %% Initial solve
 fprintf('Solving...\n')
-[mu, Sigma] = GraphSLAM_solve(OmegaReduced,zetaReduced,Omega,zeta);
+    OmegaReduced = 0; zetaReduced = 0;
+[mu, Sigma] = GraphSLAM_solve(OmegaReduced,zetaReduced,Omega,zeta,c_i_t);
 % Timeout counter for main loop
 %%
 itimeout = 0;
 MAX_ITER = 20;
 DEBUGflag = true;
+c_i_t_last = c_i_t;
 while (itimeout < MAX_ITER) 
     
     % Test correspondences for imagenex scan matching.
@@ -146,12 +149,13 @@ while (itimeout < MAX_ITER)
     % reduce
 %%
     fprintf('Reducing...\n')
-    [OmegaReduced,zetaReduced] = GraphSLAM_reduce(timeSteps(startIdx:endIdx),stateSize,Omega,zeta);
+%    [OmegaReduced,zetaReduced] = GraphSLAM_reduce(timeSteps(startIdx:endIdx),stateSize,Omega,zeta);
+
     % solve
     fprintf('Solving...\n')
-    [mu, Sigma] = GraphSLAM_solve(OmegaReduced,zetaReduced,Omega,zeta);
+    [mu, Sigma] = GraphSLAM_solve(OmegaReduced,zetaReduced,Omega,zeta,c_i_t);
     
-    if (sum(sum(c_i_t - c_i_t_last)) == 0)
+    if (false)%sum(sum(c_i_t - c_i_t_last)) == 0)
         fprintf('No new correspondences detected! Exiting loop...\n');
         break;
     end
@@ -160,20 +164,32 @@ while (itimeout < MAX_ITER)
    
    if (DEBUGflag)
        
-      figure(3)
+      fig3=figure(3);
+      set(fig3,'Position',[0 0 700 500]);
         plot(xVehBergframe(1,:) - xVehBergframe(1,1)  ,xVehBergframe(2,:) - xVehBergframe(2,1),'g')
         hold on
         axis equal
-        stateHist = reshape(mu(1:6*endIdx),6,[]);
+        stateHist = reshape(mu(1:6*(endIdx-startIdx)),6,[]);
         mapEsts = reshape(mu(6*endIdx+1:end),3,[]);
         colorz = 'rbkcy';
-        plot(-stateHist(2,:),stateHist(1,:),colorz(itimeout))
-        inx = unique(c_i_t)
-        scatter(-mapEsts(2,inx(2:end)),mapEsts(1,inx(2:end)))
+        plot(-stateHist(2,:),stateHist(1,:),colorz(mod(itimeout,5)+1))
+        inx = unique(c_i_t);
+        for qq = 1:endIdx
+            plotFeatures = find(c_i_t_last(:,qq)~=-17);
+           scatter(-mapEsts(2,c_i_t_last(plotFeatures,qq)),mapEsts(1,c_i_t_last(plotFeatures,qq)), 3*ones(size(mapEsts(1,c_i_t_last(plotFeatures,qq)))))
+           drawnow()
+        end
+         figure(4); plot(stateHist(3:end,:)')
+        figure(5); plot(stateHist(end,:)',colorz(mod(itimeout,5)+1))
+        hold on; plot(diff(euler_berg_t(3,1:endIdx))./diff(timeSteps(1:endIdx)),'g')
+        title('iceberg angular velocity')
+        legend('estimated','actual');
+        figure(6); spy(Omega)
        drawnow()
-       keyboard;
+       
    end
-   
+   keyboard
+   c_i_t = c_i_t_last;
 end
 
 %stateHist = reshape(Omega(1:endIdx*6,1:endIdx*6)\zeta(1:endIdx*6),6,[]);
