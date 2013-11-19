@@ -18,14 +18,14 @@ Omega(2,2) = 1e13;
 Omega(3,3) = 1;
 Omega(4,4) = 1;
 Omega(5,5) = 1e13;
-Omega(6,6) = 1000;
+Omega(6,6) = 1e13;
 % ininitialize zeta
 zeta = zeros(stateSize*Nstates + 3*NmapFeatures,1);
 zeta(1:6) = [0 0 inputs(1,1) 0 0 fullStateEstimate(6)]';
 xhat = zeros(stateSize,1);
 G = zeros(stateSize);
-velocityDamping = .1;
-processNoise = diag([.0001,.0001,.0001,.0001,.000001,1e-10]);
+velocityDamping = 1;
+processNoise = diag([.00000001,.00000001,.000001,.000001,.00000001,1e-13]);
 
 %% Motion model
 for ii = 1:Nstates-1
@@ -68,8 +68,9 @@ for mapFeatureIterator = 1:NmapFeatures;
         B_R_V = Euler2RotMat(0,0,stateEstimate(5,ii)); 
         if(correspondences(jj,ii) == j)
             expectedMeasurement = B_R_V'*(mapEstimate(:,j) - [stateEstimate(1:2,ii); 0] + [0 0 eps]') ;
+            % build covariance
             sigmaParallel = sensor.beamSigmaPercentageOfRange*norm(rangeMeasurements(:,j));
-            QrangeBeamframe = 10*diag([sigmaParallel^2, 1/10*sigmaParallel^2 , 1/10*sigmaParallel^2]);
+            QrangeBeamframe = diag([sigmaParallel^2, 1/10*sigmaParallel^2 , 1/10*sigmaParallel^2]);
             vec1 = rangeMeasurements(:,j)/norm(rangeMeasurements(:,j));
             vec2 = [-(vec1(2)+vec1(3))/(vec1(1)+eps); 1; 1];
             vec2 = vec2/norm(vec2);
@@ -78,15 +79,12 @@ for mapFeatureIterator = 1:NmapFeatures;
             
             Qinv = inv(RCov'*QrangeBeamframe*RCov);
             
-%             end
-%             while (expBearing <= 0)
-%                 expBearing = expBearing + 2*pi;
-%             end
-
+            
             xDiff = mapEstimate(1:2,j) - stateEstimate(1:2,ii);
             zHat = expectedMeasurement;
             zMeas = rangeMeasurements(:,j);
-            zDiff = zMeas - zHat;
+            zDiff = (zMeas - zHat);
+            %[[jj;ii;j] zHat zMeas zDiff]
             cTheta = B_R_V(1,1);
             sTheta = B_R_V(2,1);
             %[zHat zMeas zDiff]
@@ -112,12 +110,12 @@ for mapFeatureIterator = 1:NmapFeatures;
             
             % Add information about position to Omega and zeta
             
-            Omega((ii-1)*stateSize+1:(ii)*stateSize,(ii-1)*stateSize+1:(ii)*stateSize) = ... %self
-                sparse(Omega((ii-1)*stateSize+1:(ii)*stateSize,(ii-1)*stateSize+1:(ii)*stateSize)...
+            Omega(ii*stateSize-5:ii*stateSize,ii*stateSize-5:ii*stateSize) = ... %self
+                sparse(Omega(ii*stateSize-5:ii*stateSize,ii*stateSize-5:ii*stateSize)...
                 + CovAdd(1:stateSize,1:stateSize));
             
-            Omega((ii-1)*stateSize+1:(ii)*stateSize,Nstates*stateSize+(mapFeatureIterator-1)*3+1:Nstates*stateSize+(mapFeatureIterator*3)) = ... %self
-                sparse(Omega((ii-1)*stateSize+1:(ii)*stateSize,Nstates*stateSize+(mapFeatureIterator-1)*3+1:Nstates*stateSize+(mapFeatureIterator*3))...
+            Omega(ii*stateSize-5:ii*stateSize,Nstates*stateSize+mapFeatureIterator*3-2:Nstates*stateSize+(mapFeatureIterator*3)) = ... %self
+                sparse(Omega(ii*stateSize-5:ii*stateSize,Nstates*stateSize+mapFeatureIterator*3-2:Nstates*stateSize+(mapFeatureIterator*3))...
                 + CovAdd(1:stateSize,stateSize+1:stateSize+3));
             
             zeta((ii-1)*stateSize+1:(ii)*stateSize) = zeta((ii-1)*stateSize+1:(ii)*stateSize) +...
@@ -172,15 +170,15 @@ for ii = 1:Nstates
     % Handle dvl measurements
     % and penalize large iceberg angular velocities
     
-    %% omega:
-    % initial idea: 2*sigma = .01, so sigma = .005. 1/.005^2 = 40000
-    penalty = 40000; % 1/covariance of expected measurement
-    % Penalize large omega
-    Homega = [0 0 0 0 0 1];
-    zMeasOmega = stateEstimate(6,ii);
-    zExpOmega = 0;
-    Omega(ii*stateSize,ii*stateSize) = Omega(ii*stateSize,ii*stateSize) + penalty;
-    zeta(ii*stateSize-5:ii*stateSize) = zeta(ii*stateSize-5:ii*stateSize) + penalty*Homega'*(zMeasOmega - zExpOmega + Homega*stateEstimate(:,ii));
+%     %% omega:
+%     % initial idea: 2*sigma = .01, so sigma = .005. 1/.005^2 = 40000
+%     penalty = 40000; % 1/covariance of expected measurement
+%     % Penalize large omega
+%     Homega = [0 0 0 0 0 1];
+%     zMeasOmega = stateEstimate(6,ii);
+%     zExpOmega = 0;
+%     Omega(ii*stateSize,ii*stateSize) = Omega(ii*stateSize,ii*stateSize) + penalty;
+%     zeta(ii*stateSize-5:ii*stateSize) = zeta(ii*stateSize-5:ii*stateSize) + penalty*Homega'*(zMeasOmega - zExpOmega + Homega*stateEstimate(:,ii));
     %% dvl
     dvlMeas = dvlReadings(ii) ;
     Qdvl = .00001;

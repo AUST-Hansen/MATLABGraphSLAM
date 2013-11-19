@@ -26,9 +26,9 @@ endIdx = 200;
 stateSize = 6;
 % Imagenex matching parameters
 ignx_sparsity = 3;
-scanmatch_threshold = 15; % only look for matches within this many meters of pose difference
+scanmatch_threshold = 10; % only look for matches within this many meters of pose difference
 scanmatch_RMStolerance = 2;
-scanmatch_probThreshold = 3; 
+scanmatch_probThreshold = .3; 
 % Use imagenex, multibeam and DVL ranges in observations?
 useDVLRanges = false;
 useMultibeamRanges = false;
@@ -140,6 +140,7 @@ while (itimeout < MAX_ITER)
     
     % Test correspondences for imagenex scan matching.
     c_i_t_last = c_i_t;
+    mu_last = mu;
     [c_i_t] = GraphSLAMcorrespondenceViaScanMatch(mu,c_i_t,scanmatch_threshold,scanmatch_probThreshold,scanmatch_RMStolerance);
     % linearize
     fprintf('Linearizing...\n')
@@ -154,11 +155,8 @@ while (itimeout < MAX_ITER)
     % solve
     fprintf('Solving...\n')
     [mu, Sigma] = GraphSLAM_solve(OmegaReduced,zetaReduced,Omega,zeta,c_i_t);
-    
-    if (false)%sum(sum(c_i_t - c_i_t_last)) == 0)
-        fprintf('No new correspondences detected! Exiting loop...\n');
-        break;
-    end
+
+    mu = .1*mu_last+.9*mu;
    itimeout=itimeout+1 ;
    fprintf('%d iterations completed...\n',itimeout)
    
@@ -173,13 +171,22 @@ while (itimeout < MAX_ITER)
         mapEsts = reshape(mu(6*endIdx+1:end),3,[]);
         colorz = 'rbkcy';
         plot(-stateHist(2,:),stateHist(1,:),colorz(mod(itimeout,5)+1))
-        inx = unique(c_i_t);
-        for qq = 1:endIdx
-            plotFeatures = find(c_i_t_last(:,qq)~=-17);
-           scatter(-mapEsts(2,c_i_t_last(plotFeatures,qq)),mapEsts(1,c_i_t_last(plotFeatures,qq)), 3*ones(size(mapEsts(1,c_i_t_last(plotFeatures,qq)))))
-           drawnow()
-        end
+        scatter(trueIgnxCloud(1,:),trueIgnxCloud(2,:),ones(1,size(trueIgnxCloud,2)),'g')
+%           for qq = 1:1:endIdx-1
+%               B_R_Vi = Euler2RotMat(0,0,stateHist(5,qq));
+%               velocity = B_R_Vi*[stateHist(3:4,qq);0];
+%               scatter(-stateHist(2,qq),stateHist(1,qq),colorz(mod(qq,5)+1))
+%               quiver(-stateHist(2,qq),stateHist(1,qq),-velocity(2),velocity(1))
+%               plotFeatures = find(c_i_t_last(:,qq)~=-17);
+%               if(~isempty(plotFeatures))
+%                 scatter(-mapEsts(2,c_i_t_last(plotFeatures,qq)),mapEsts(1,c_i_t_last(plotFeatures,qq)), 3*ones(size(mapEsts(1,c_i_t_last(plotFeatures,qq)))))
+%                 pause(.5)
+%                 drawnow()
+%               end
+    %      end
          figure(4); plot(stateHist(3:end,:)')
+         hold on;
+         plot(euler_obs_t(3,1:endIdx) - euler_berg_t(3,1:endIdx) - pi/2)
         figure(5); plot(stateHist(end,:)',colorz(mod(itimeout,5)+1))
         hold on; plot(diff(euler_berg_t(3,1:endIdx))./diff(timeSteps(1:endIdx)),'g')
         title('iceberg angular velocity')
@@ -188,8 +195,15 @@ while (itimeout < MAX_ITER)
        drawnow()
        
    end
-   keyboard
-   c_i_t = c_i_t_last;
+   
+    if (sum(sum(c_i_t - c_i_t_last)) == 0)
+        figure(3)
+        scatter(-mapEsts(2,:),mapEsts(1,:), 3*ones(size(mapEsts(1,:))))              
+        fprintf('No new correspondences detected! Exiting loop...\n');
+        break;
+    end
+   %keyboard
+   %c_i_t = c_i_t_last;
 end
 
 %stateHist = reshape(Omega(1:endIdx*6,1:endIdx*6)\zeta(1:endIdx*6),6,[]);
