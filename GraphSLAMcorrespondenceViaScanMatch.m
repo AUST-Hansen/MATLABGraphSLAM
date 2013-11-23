@@ -68,8 +68,14 @@ for ii = 1:Nstates
         
     end
     
+    % Retire unseen features
     
     
     
     
+end
+
+UniqueFeatures = unique(c_i_t_new(c_i_t_new>0));
+for iNew = 1:length(UniqueFeatures)
+    c_i_t_new(c_i_t_new==UniqueFeatures(iNew)) = iNew;
 end
