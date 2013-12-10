@@ -20,20 +20,22 @@ filename = 'RandomTrajectories/WallFollowingTraj2.mat';
 % range data, to allow a sparser map of observed features.
 startIdx = 1; % for now, this must be 1
 skip = 1;     % for now, this must be 1 also
-rangeSkip = 5;
-poseSkip = 5;
-endIdx = 750;
+rangeSkip = 1;
+poseSkip = 10;
+endIdx = 800;
 stateSize = 6;
 % Imagenex matching parameters
 ignx_sparsity = 3;
-scanmatch_threshold = 100; % only look for matches within this many meters of pose difference
-scanmatch_RMStolerance = 2;
-scanmatch_probThreshold = .5; 
+scanmatch_threshold = 20; % only look for matches within this many meters of pose difference
+scanmatch_RMStolerance = 2.5;
+scanmatch_probThreshold = 1; 
 % Use imagenex, multibeam and DVL ranges in observations?
 useDVLRanges = false;
 useMultibeamRanges = false;
 useImagenexData = true;
-
+% give loop closure a few iterations to do its thing
+lcAllowance = 2;
+MAX_ITER = 40;
 %% Read in Data
 fprintf('Reading in Data...\n')
 addpath ..
@@ -52,7 +54,9 @@ fprintf('Reson...\n')
 % integrate high rate pose data but not deal with as many map features if
 % we don't want to.
 fprintf('Cleaning and formatting data...\n')
-[measurementTimestamps, rangeMeasurements, c_i_t] = cleanMeasurements(timeSteps(1:skip:endIdx),sensor,rangeData(:,startIdx:skip:endIdx),useMultibeamRanges,imagenex,imagenexData(:,startIdx:skip:endIdx),useImagenexData,dvl,dvlData(startIdx:skip:endIdx),useDVLRanges,rangeSkip,poseSkip);
+[measurementTimestamps, rangeMeasurements, c_i_t, meas_ind] = cleanMeasurements(timeSteps(1:skip:endIdx),sensor,rangeData(:,startIdx:skip:endIdx),useMultibeamRanges,imagenex,imagenexData(:,startIdx:skip:endIdx),useImagenexData,dvl,dvlData(startIdx:skip:endIdx),useDVLRanges,rangeSkip,poseSkip);
+%% try to identify loop closure
+c_i_t = lookForLoopClosure(c_i_t,rangeMeasurements,measurementTimestamps,scanmatch_probThreshold);
 %--------------------------------------------------------------------------
 %% Form input vectors  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Extract angular velocity of vehicle in inertial as a control input
@@ -75,7 +79,7 @@ initialMapEstimate = GraphSLAM_initializeMap(initialStateEstimate,rangeMeasureme
 initialFullStateEstimate = [reshape(initialStateEstimate,[],1); reshape(initialMapEstimate,[],1)];
 %% Calculate inzformation form of full posterior
 fprintf('Linearizing...\n')
-[Omega,zeta] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,c_i_t,initialFullStateEstimate,false);
+[Omega,zeta] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,c_i_t,meas_ind,initialFullStateEstimate,false);
 %% initial testing stuff
 %stateHist = reshape(Omega(1:endIdx*6,1:endIdx*6)\zeta(1:endIdx*6),6,[]);
 figure(1);
@@ -130,11 +134,19 @@ fprintf('Reducing...\n')
 %% Initial solve
 fprintf('Solving...\n')
 [mu, Sigma] = GraphSLAM_solve(OmegaReduced,zetaReduced,Omega,zeta,c_i_t);
+
+figure(12)
+plot(xVehBergframe(1,:) - xVehBergframe(1,1)  ,xVehBergframe(2,:) - xVehBergframe(2,1),'g')
+hold on; axis equal
+plot(-stateHist(2,:),stateHist(1,:),'k')
+scatter(-mapEsts(2,:),mapEsts(1,:),ones(1,size(mapEsts,2)),'k')
+stateHist = reshape(mu(1:6*endIdx),6,[]);
+mapEsts = reshape(mu(6*endIdx+1:end),3,[]);
+
 % Timeout counter for main loop
 %%
 itimeout = 0;
-MAX_ITER = 20;
-DEBUGflag = true;
+DEBUGflag = false;
 c_i_t_last = c_i_t;
 figure(10);spy(Omega)
 
@@ -144,12 +156,15 @@ while (itimeout < MAX_ITER)
     % Test correspondences for imagenex scan matching.
     c_i_t_last = c_i_t;
     mu_last = mu;
-    [c_i_t] = GraphSLAMcorrespondenceViaScanMatch(mu,c_i_t,scanmatch_threshold,scanmatch_probThreshold,scanmatch_RMStolerance);
-    % linearize
+    if itimeout>lcAllowance
+        %c_i_t = meas_ind; % TODO: only reset once
+        [c_i_t] = GraphSLAMcorrespondenceViaScanMatch(mu,c_i_t,scanmatch_threshold,scanmatch_probThreshold,scanmatch_RMStolerance,meas_ind,rangeMeasurements);
+    end
+        % linearize
     fprintf('Linearizing...\n')
     clear Omega
     clear Sigma
-    [Omega,zeta,c_i_t] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,c_i_t,mu,true);
+    [Omega,zeta,c_i_t] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,c_i_t,meas_ind,mu,true);
     % reduce
 %%
     fprintf('Reducing...\n')
@@ -158,7 +173,7 @@ while (itimeout < MAX_ITER)
     % solve
     fprintf('Solving...\n')
     [mu, Sigma] = GraphSLAM_solve(OmegaReduced,zetaReduced,Omega,zeta,c_i_t);
-
+    %sanityCheck = Omega\zeta;
     %mu = .1*mu_last+.9*mu;
    itimeout=itimeout+1 ;
    fprintf('%d iterations completed...\n',itimeout)
@@ -170,14 +185,21 @@ while (itimeout < MAX_ITER)
        
       fig3=figure(3);
       set(fig3,'Position',[0 0 700 500]);
-        plot(xVehBergframe(1,:) - xVehBergframe(1,1)  ,xVehBergframe(2,:) - xVehBergframe(2,1),'g')
+        
         hold on
         axis equal
         stateHist = reshape(mu(1:6*(endIdx-startIdx)),6,[]);
         mapEsts = reshape(mu(6*endIdx+1:end),3,[]);
+        %sanityStates = reshape(sanityCheck(1:6*(endIdx-startIdx)),6,[]);
+        %sanityMaps = reshape(sanityCheck(6*endIdx+1:end),3,[]);
         colorz = 'rbkcy';
         plot(-stateHist(2,:),stateHist(1,:),colorz(mod(itimeout,5)+1))
-        scatter(trueIgnxCloud(1,:),trueIgnxCloud(2,:),ones(1,size(trueIgnxCloud,2)),'g')
+        %plot(-sanityStates(2,:),sanityStates(1,:),'c')
+        if(itimeout ==1)
+          plot(xVehBergframe(1,:) - xVehBergframe(1,1)  ,xVehBergframe(2,:) - xVehBergframe(2,1),'g')
+          scatter(trueIgnxCloud(1,:),trueIgnxCloud(2,:),ones(1,size(trueIgnxCloud,2)),'g')
+        end
+        scatter(-mapEsts(2,:),mapEsts(1,:),ones(1,size(mapEsts,2)),'k')
           for qq = 1:5:endIdx-1
               B_R_Vi = Euler2RotMat(0,0,stateHist(5,qq));
               velocity = B_R_Vi*[stateHist(3:4,qq);0];
@@ -192,6 +214,10 @@ while (itimeout < MAX_ITER)
          figure(4); plot(stateHist(3:end,:)')
          hold on;
          plot(euler_obs_t(3,1:endIdx) - euler_berg_t(3,1:endIdx) - pi/2)
+   end
+   if(true)
+        colorz = 'rbkcy';
+        stateHist = reshape(mu(1:6*(endIdx-startIdx)),6,[]);
         figure(5); plot(stateHist(end,:)',colorz(mod(itimeout,5)+1))
         hold on; plot(diff(euler_berg_t(3,1:endIdx))./diff(timeSteps(1:endIdx)),'g')
         title('iceberg angular velocity')
@@ -201,14 +227,21 @@ while (itimeout < MAX_ITER)
        
    end
    %%
-    if (sum(sum(c_i_t - c_i_t_last)) == 0)
+   figure(7); spy(c_i_t-c_i_t_last);
+    if ( sum(sum(c_i_t - c_i_t_last)) == 0 && itimeout >lcAllowance+1)
+        noNewFeatures = noNewFeatures+1;
+    else
+        noNewFeatures = 0;
+    end
+    if ( noNewFeatures >= 4|| itimeout >=MAX_ITER) 
+    %if (itimeout >=12)
         figure(3)
-        for zz = 1:size(c_i_t,1)*size(c_i_t,2)
-            if (c_i_t(zz) ~= -17)
-                scatter(-mapEsts(2,c_i_t(zz)),mapEsts(1,c_i_t(zz)), 2)   
-                hold on;
-            end
-        end
+%         for zz = 1:size(c_i_t,1)*size(c_i_t,2)
+%             if (c_i_t(zz) ~= -17)
+%                 scatter(-mapEsts(2,c_i_t(zz)),mapEsts(1,c_i_t(zz)), 2)   
+%                 hold on;
+%             end
+%         end
         fprintf('No new correspondences detected! Exiting loop...\n');
         break;
     end
@@ -216,22 +249,84 @@ while (itimeout < MAX_ITER)
    %c_i_t = c_i_t_last;
 end
 
+%% Print a whole buncha crap
+      fig3=figure(3);
+      set(fig3,'Position',[0 0 700 500]);
+        
+        hold on
+        axis equal
+        stateHist = reshape(mu(1:6*(endIdx-startIdx)),6,[]);
+        mapEsts = reshape(mu(6*endIdx+1:end),3,[]);
+        %sanityStates = reshape(sanityCheck(1:6*(endIdx-startIdx)),6,[]);
+        %sanityMaps = reshape(sanityCheck(6*endIdx+1:end),3,[]);
+        colorz = 'rbkcy';
+        plot(-stateHist(2,:),stateHist(1,:),colorz(mod(itimeout,5)+1))
+        %plot(-sanityStates(2,:),sanityStates(1,:),'c')
+        if(itimeout ==1)
+          plot(xVehBergframe(1,:) - xVehBergframe(1,1)  ,xVehBergframe(2,:) - xVehBergframe(2,1),'g')
+          scatter(trueIgnxCloud(1,:),trueIgnxCloud(2,:),ones(1,size(trueIgnxCloud,2)),'g')
+        end
+        scatter(-mapEsts(2,:),mapEsts(1,:),ones(1,size(mapEsts,2)),'k')
+          for qq = 1:5:endIdx-1
+              B_R_Vi = Euler2RotMat(0,0,stateHist(5,qq));
+              velocity = B_R_Vi*[stateHist(3:4,qq);0];
+              scatter(-stateHist(2,qq),stateHist(1,qq),colorz(mod(qq,5)+1))
+              quiver(-stateHist(2,qq),stateHist(1,qq),-velocity(2),velocity(1))
+              plotFeatures = find(c_i_t_last(:,qq)~=-17);
+%               if(~isempty(plotFeatures))
+%                 scatter(-mapEsts(2,c_i_t_last(plotFeatures,qq)),mapEsts(1,c_i_t_last(plotFeatures,qq)), ones(size(mapEsts(1,c_i_t_last(plotFeatures,qq)))))
+%                 drawnow()
+%               end
+         end
+         figure(4); plot(stateHist(3:end,:)')
+         hold on;
+         plot(euler_obs_t(3,1:endIdx) - euler_berg_t(3,1:endIdx) - pi/2,'g')
+         [vels,lock] = processDVL(dvl,dvlData(1:endIdx),true,false);
+         plot(vels(1,:),'k')
+         plot(vels(2,:),'k')
+         plot(lock,'r')
+         legend('v_x est','v_y est','heading est','\omega_{berg} est','true heading','DVL_x','DVL_y','DVL lock')
+         title('Motion estimates vs. truth')
+        figure(5); plot(stateHist(end,:)',colorz(mod(itimeout,5)+1))
+        hold on; plot(diff(euler_berg_t(3,1:endIdx))./diff(timeSteps(1:endIdx)),'g')
+        title('iceberg angular velocity')
+        legend('estimated','actual');
+        figure(6); spy(Omega)
+       drawnow()
+
 %stateHist = reshape(Omega(1:endIdx*6,1:endIdx*6)\zeta(1:endIdx*6),6,[]);
 %% 
 figure(3)
 %spy(Omega(1:10000,1:10000)); drawnow;
-mu = Omega\zeta;
+%mu = Omega\zeta;
 %%
 state = mu;
 save('OmegaAndZeta.mat','Omega','zeta');
-clear Omega;
-clear zeta;
+%clear Omega;
+%clear zeta;
+%state = Omega\zeta;
 stateHist = reshape(state(1:6*endIdx),6,[]);
 mapEsts = reshape(state(6*endIdx+1:end),3,[]);
 figure()
 plot(xVehBergframe(1,:) - xVehBergframe(1,1)  ,xVehBergframe(2,:) - xVehBergframe(2,1),'g')
 hold on; axis equal
+scatter(trueIgnxCloud(1,:),trueIgnxCloud(2,:),ones(1,size(trueIgnxCloud,2)),'g')
 plot(-stateHist(2,:),stateHist(1,:),'k')
-%scatter(-mapEsts(2,:),mapEsts(1,:),ones(1,size(mapEsts,2)),'k')
+scatter(-mapEsts(2,:),mapEsts(1,:),ones(1,size(mapEsts,2)),'k')
+legend('initial estimate','after being pushed through information form','truth','after one iteration of correspondence')
+title('estimated path')
+
+%%
+
+[R,T,ERR] = icp(trueIgnxCloud(:,1:10:end),[-mapEsts(2,:);mapEsts(1,:);mapEsts(3,:)],'WorstRejection',.1);
+rotatedMap = R*mapEsts + repmat(T,1,size(mapEsts,2));
+rotatedTrack = R(1:2,1:2)*stateHist(1:2,:) + repmat(T(1:2),1,size(stateHist,2));
+figure(15); 
+
+plot(xVehBergframe(1,:) - xVehBergframe(1,1)  ,xVehBergframe(2,:) - xVehBergframe(2,1),'g')
+hold on; axis equal
+scatter(trueIgnxCloud(1,:),trueIgnxCloud(2,:),ones(1,size(trueIgnxCloud,2)),'g')
+plot(-rotatedTrack(2,:),rotatedTrack(1,:),'k')
+scatter(-rotatedMap(2,:),rotatedMap(1,:),ones(1,size(rotatedMap,2)),'k')
 legend('initial estimate','after being pushed through information form','truth','after one iteration of correspondence')
 title('estimated path')

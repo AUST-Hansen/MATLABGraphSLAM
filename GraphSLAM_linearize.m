@@ -1,4 +1,4 @@
-function [Omega,zeta,c_i_t_new] = GraphSLAM_linearize(timeStamps,inputs,measTimestamps,sensor,rangeMeasurements,dvl,dvlReadings,correspondences,fullStateEstimate,haveInitialized)
+function [Omega,zeta,c_i_t_new] = GraphSLAM_linearize(timeStamps,inputs,measTimestamps,sensor,rangeMeasurements,dvl,dvlReadings,correspondences,meas_ind,fullStateEstimate,haveInitialized)
 
 Nstates = size(timeStamps,2);
 stateSize = 6;
@@ -16,23 +16,24 @@ Omega(2,2) = 1e13;
 Omega(3,3) = 1;
 Omega(4,4) = 1;
 Omega(5,5) = 1e13;
-Omega(6,6) = 1e13;
+Omega(6,6) = 1; % TODO: reduce this
 % ininitialize zeta
 zeta = zeros(stateSize*Nstates + 3*NmapFeatures,1);
-zeta(1:6) = [0 0 inputs(1,1) 0 0 fullStateEstimate(6)]';
+zeta(1:6) = [0 0 inputs(1,1) 0 0 0]';
 xhat = zeros(stateSize,1);
 G = zeros(stateSize);
 %processNoise = diag([1e-10,1e-10,1e-9,1e-9,1e-9,1e-8]);
-processNoise = 1e-5*eye(stateSize);
+processNoise = 1e-6*eye(stateSize);
 processNoise(3,3) = 1e-6;
 processNoise(4,4) = 1e-6;
-processNoise(5,5) = 1e-8;
-processNoise(end,end) = 1e-6;
+processNoise(5,5) = 1e-4;
+processNoise(end,end) = 1e-10;
 %% Motion model
 for ii = 1:Nstates-1
     dT = (timeStamps(ii+1) - timeStamps(ii));
     heading = stateEstimate(5,ii);
     berg_R_veh = [cos(heading), -sin(heading); sin(heading), cos(heading)];
+
     %xhat(1:2) = eye(2)*stateEstimate(1:2,ii) + berg_R_veh*stateEstimate(3:4,ii)*dT; % update position
     %xhat(3:4) = .0*stateEstimate(3:4,ii) + 1*[inputs(1,ii); 0];
     %xhat(5) = stateEstimate(5,ii) + (inputs(2,ii) - stateEstimate(6,ii))*dT;
@@ -43,7 +44,7 @@ for ii = 1:Nstates-1
     
     G(1:2,1:2) = eye(2);
     G(1:2,3:4) = berg_R_veh*dT;
-    G(3:4,3:4) = eye(2);
+    G(3:4,3:4) = eye(2);%*(1-dT);
     G(5:6,5:6) = eye(2);
     G(5,6) = -dT;
     % add information to Omega and zeta
@@ -53,7 +54,7 @@ for ii = 1:Nstates-1
     
     zeta((ii-1)*stateSize+1:(ii+1)*stateSize) = zeta((ii-1)*stateSize+1:(ii+1)*stateSize) +...
         [-G'; eye(stateSize)]*(processNoise\(xhat - G*stateEstimate(:,ii)));
-    
+
 end
 
 %% Measurements
@@ -68,34 +69,41 @@ counter = 0;
 %         jj = j_s(idummy);
 for ii = 1:Nstates
     B_R_V = Euler2RotMat(0,0,stateEstimate(5,ii)); 
-    for jj = 1:sum(correspondences(:,ii) ~= -17)
+    V_R_B = B_R_V';
+    for jj = 1:sum(meas_ind(:,ii) ~= -17)
         j = correspondences(jj,ii);
+        measIndex = meas_ind(jj,ii); 
         mapFeatureIterator = j;
         %if(correspondences(jj,ii) == j)
             %expectedMeasurement = B_R_V'*(mapEstimate(:,j) - [stateEstimate(1:2,ii); 0] + [0 0 eps]') ;
             %expectedMeasurement = B_R_V'*(-[stateEstimate(1:2,ii); 0] + [0 0 eps]') ;
             % build covariance
-            sigmaParallel = sensor.beamSigmaPercentageOfRange*norm(rangeMeasurements(:,j));
+            sigmaParallel = sensor.beamSigmaPercentageOfRange*norm(rangeMeasurements(:,measIndex));
             QrangeBeamframe = diag([sigmaParallel^2, 1/10*sigmaParallel^2 , 1/10*sigmaParallel^2]);
-            vec1 = rangeMeasurements(:,j)/norm(rangeMeasurements(:,j));
+            vec1 = rangeMeasurements(:,measIndex)/norm(rangeMeasurements(:,measIndex));
             vec2 = [-(vec1(2)+vec1(3))/(vec1(1)+eps); 1; 1];
             vec2 = vec2/norm(vec2);
             vec3 = cross(vec1,vec2);
             RCov = [vec1 vec2 vec3]';
             
-            Qinv = inv(RCov'*QrangeBeamframe*RCov);
-            
+            %Qinv = inv(RCov'*QrangeBeamframe*RCov);
+
+            Qinv = 1000*eye(3);
             
             xDiff = mapEstimate(1:2,j) - stateEstimate(1:2,ii);
+            zHat = B_R_V'*[xDiff;0];
+            zMeas = rangeMeasurements(:,measIndex);
             %xDiff =  -stateEstimate(1:2,ii);
             %[[jj;ii;j] zHat zMeas zDiff]
             cTheta = B_R_V(1,1);
             sTheta = B_R_V(2,1);
             %[zHat zMeas zDiff]
             
-            H = [-cTheta, -sTheta, 0, 0, -xDiff(1)*sTheta+xDiff(2)*cTheta, 0, cTheta, sTheta, 0;...
-                sTheta, -cTheta, 0, 0, -xDiff(1)*cTheta-xDiff(2)*sTheta, 0, -sTheta, cTheta, 0;...
-                0,0,0,0,0,0,0,0,1];
+%             H = [-cTheta, -sTheta, 0, 0, -xDiff(1)*sTheta+xDiff(2)*cTheta, 0, cTheta, sTheta, 0;...
+%                 sTheta, -cTheta, 0, 0, -xDiff(1)*cTheta-xDiff(2)*sTheta, 0, -sTheta, cTheta, 0;...
+%                 0,0,0,0,0,0,0,0,1];
+            H = [[-V_R_B(1:2,1:2), zeros(2), [-sTheta cTheta; -cTheta -sTheta]*xDiff , [0;0],  V_R_B(1:2,1:3)];...
+                     [0, 0,           0,0                   ,0                         ,0       ,0,0,  1]];
             %H = [cTheta, sTheta, 0, 0, xDiff(1)*sTheta-xDiff(2)*cTheta, 0, -cTheta, -sTheta, 0;...
             %    -sTheta, cTheta, 0, 0, xDiff(1)*cTheta+xDiff(2)*sTheta, 0, sTheta, -cTheta, 0;...
             %    0,0,0,0,0,0,0,0,1];
@@ -110,8 +118,8 @@ for ii = 1:Nstates
             %                    0 0 1/sqrt(1-(delta(3)/sqrtQ)^2)*(2*delta(3)) ];
             CovAdd = H'*Qinv*H;
             %CovAdd(end,end) = .01;
-            %zetaAdd = H'*Qinv*(zDiff  + H*[stateEstimate(:,ii) ; mapEstimate(:,j)]);
-            zetaAdd = H'*Qinv*( H*[stateEstimate(:,ii) ; mapEstimate(:,j)]);
+            %zetaAdd = H'*Qinv*(H*[stateEstimate(:,ii) ; mapEstimate(:,j)]);
+            zetaAdd = H'*Qinv*(zMeas - zHat + H*[stateEstimate(:,ii) ; mapEstimate(:,j)]);
             
             % Add information about position to Omega and zeta
             
@@ -156,11 +164,11 @@ c_i_t_new = correspondences;
 
 for ii = 1:Nstates
     % Handle dvl measurements
-    % and penalize large iceberg angular velocities
+    % and penalize large iceberg angular velocities ?
     
 %     %% omega:
     % initial idea: 2*sigma = .01, so sigma = .005. 1/.005^2 = 40000
-    penalty = 1000; % 1/covariance of expected measurement
+    penalty = 000; % 1/covariance of expected measurement
     % Penalize large omega
     Homega = [0 0 0 0 0 1];
     zMeasOmega = stateEstimate(6,ii);
@@ -169,7 +177,7 @@ for ii = 1:Nstates
     zeta(ii*stateSize-5:ii*stateSize) = zeta(ii*stateSize-5:ii*stateSize) + penalty*Homega'*(zMeasOmega - zExpOmega + Homega*stateEstimate(:,ii));
     %% dvl
     dvlMeas = dvlReadings(ii) ;
-    Qdvl = .0001;
+    Qdvl = 1e-4;
     for jDvl = 1:dvl.numBeams
         if(~isnan(dvlMeas.ranges(jDvl))) % valid return
             

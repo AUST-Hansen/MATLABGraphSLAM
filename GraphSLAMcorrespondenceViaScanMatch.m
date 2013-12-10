@@ -1,4 +1,4 @@
-function [c_i_t_new] = GraphSLAMcorrespondenceViaScanMatch(mu,c_i_t,posThreshold,probThreshold,RMStolerance)
+function [c_i_t_new] = GraphSLAMcorrespondenceViaScanMatch(mu,c_i_t,posThreshold,probThreshold,RMStolerance,measIndices,rangeMeasurements)
 
 % initialize c_i_t output
 c_i_t_new = c_i_t;
@@ -13,21 +13,26 @@ for ii = 1:Nstates
     pose1FeatureIndex = find (c_i_t(:,ii)~=-17);
     featuresSeenAtPose1 = c_i_t(pose1FeatureIndex,ii);
     pointCloud1 = mapFeatures(:,featuresSeenAtPose1);
+    %pointCloud1 = rangeMeasurements(:,measIndices(measIndices(:,ii)~=-17,ii));
     for jj = ii+1:Nstates
         if (sum(c_i_t(:,ii) ~= -17) == 0)
             continue
         end
         pos2 = stateHist(1:2,jj);
         % are they close-ish?
-        if (norm(pos1-pos2) < posThreshold)
+        % if they're close and EITHER not far apart in time, or we're
+        % looking for loop closure with first few soundings
+        if ((norm(pos1-pos2) < posThreshold && abs(ii-jj)<30 ) || (ii<20 && norm(pos1-pos2) < posThreshold)  )
             if (sum(c_i_t(:,jj) ~= -17) == 0)
                 continue
             end
             pose2FeatureIndex = find (c_i_t(:,jj)~=-17);
             featuresSeenAtPose2 = c_i_t(pose2FeatureIndex,jj);
             pointCloud2 = mapFeatures(:,featuresSeenAtPose2);
+            %pointCloud2 = rangeMeasurements(:,measIndices(measIndices(:,jj)~=-17,jj));
             % Do ICP
-            [R,T,ERR] = icp(pointCloud1,pointCloud2,'twoDee',true);
+            [R,T,ERR] = icp(pointCloud1,pointCloud2,'WorstRejection',.1);
+            ERR
             pNew = R*pointCloud2 + repmat(T,1,size(pointCloud2,2));
             % Do KNN
             [idxKNN, dKNN]=knnsearch(pointCloud1',pNew');
@@ -40,17 +45,17 @@ for ii = 1:Nstates
                     % kk is the index in pointCloud2
                     % idxKNN(kk) is the corresponding index in pointCloud1
                     %
-                    %if (isempty(   intersect(c_i_t_new(:,jj), c_i_t_new(pose1FeatureIndex(idxKNN(kk)),ii)))) % mutex constraint
-                    c_i_t_new(pose2FeatureIndex(kk),jj) = c_i_t_new(pose1FeatureIndex(idxKNN(kk)),ii);
-                    fprintf('match between %d and %d\n',ii,jj)
-                    goodmatch = true;
-                    %end
+                    if (isempty(   intersect(c_i_t_new(:,jj), c_i_t_new(pose1FeatureIndex(idxKNN(kk)),ii)))) % mutex constraint
+                        c_i_t_new(pose2FeatureIndex(kk),jj) = c_i_t_new(pose1FeatureIndex(idxKNN(kk)),ii);
+                        fprintf('match between %d and %d\n',ii,jj)
+                        goodmatch = true;
+                    end
                 end
             end
         end
         
         %%%%%% DEBUG stuff
-        if (false  && goodmatch == true)
+        if (false && rand()<.005  && goodmatch == true )
             figure(9)
             hold on; axis equal;
             for qq = 1:length(featuresSeenAtPose1)
@@ -68,14 +73,14 @@ for ii = 1:Nstates
         
     end
     
-    % Retire unseen features
+
     
     
     
     
 end
-
-UniqueFeatures = unique(c_i_t_new(c_i_t_new>0));
+    % Retire unseen features
+UniqueFeatures = unique(c_i_t_new(c_i_t_new>0))
 for iNew = 1:length(UniqueFeatures)
     c_i_t_new(c_i_t_new==UniqueFeatures(iNew)) = iNew;
 end

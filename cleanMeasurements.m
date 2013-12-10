@@ -1,4 +1,4 @@
-function [measurementTimestamps, rangeMeasurements, c_i_t] = cleanMeasurements(timeSteps,multibeam,multibeamData,useMultibeam,imagenex,imagenexData,useImagenex,dvl,dvlData,useDVL,rangeSkip,poseSkip)
+function [measurementTimestamps, rangeMeasurements, c_i_t,meas_ind] = cleanMeasurements(timeSteps,multibeam,multibeamData,useMultibeam,imagenex,imagenexData,useImagenex,dvl,dvlData,useDVL,rangeSkip,poseSkip)
 
    % rangeSkip gives density in beams
    % poseSkip gives how long to wait between imagenex for matching.
@@ -77,7 +77,7 @@ function [measurementTimestamps, rangeMeasurements, c_i_t] = cleanMeasurements(t
    % trim rangeMeasurements of unfilled entries
    rangeMeasurements = rangeMeasurements(:,1:j_validMeas);
    measurementTimestamps = timeSteps;
-   
+   meas_ind = c_i_t;
 end
    
    
