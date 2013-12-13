@@ -31,7 +31,7 @@ for ii = 1:Nstates
             pointCloud2 = mapFeatures(:,featuresSeenAtPose2);
             %pointCloud2 = rangeMeasurements(:,measIndices(measIndices(:,jj)~=-17,jj));
             % Do ICP
-            [R,T,ERR] = icp(pointCloud1,pointCloud2,'WorstRejection',.1);
+            [R,T,ERR] = icp(pointCloud1,pointCloud2,'WorstRejection',.4);
             ERR
             pNew = R*pointCloud2 + repmat(T,1,size(pointCloud2,2));
             % Do KNN

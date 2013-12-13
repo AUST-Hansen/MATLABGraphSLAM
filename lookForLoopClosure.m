@@ -5,20 +5,24 @@ c_i_t_new = c_i_t;
 pose1FeatureIndex = find (c_i_t(:,jj)~=-17);
 featuresSeenAtPose1 = c_i_t(pose1FeatureIndex,jj);
 pointCloud1 = rangeMeasurements(:,featuresSeenAtPose1);
-resids = 0*measurementTimestamps;
+resids = 1000*ones(size(measurementTimestamps));
 
 for ii = jj+1:size(measurementTimestamps,2)
     % build poses
     pose2FeatureIndex = find (c_i_t(:,ii)~=-17);
+    if (isempty(pose2FeatureIndex))
+        continue
+    end
     featuresSeenAtPose2 = c_i_t(pose2FeatureIndex,ii);
     pointCloud2 = rangeMeasurements(:,featuresSeenAtPose2);
     % do icp
-    [R,T,ERR] = icp(pointCloud1,pointCloud2);
-    
+    [R,T,ERR] = icp(pointCloud1,pointCloud2,'WorstRejection',.4);
+    %[R,T,ERR] = icp(pointCloud1,pointCloud2);  
     resids(ii) = ERR(end);
     if(mod(ii,50) == 0)
         %fprintf('%d of %d poses\n',ii,size(measurementTimestamps,2)) ;
     end
+    ii
 end
 
 lcResids = resids;
@@ -40,6 +44,24 @@ for kk = 1:length(idxKNN)
             c_i_t_new(pose2FeatureIndex(kk),ii) = c_i_t_new(pose1FeatureIndex(idxKNN(kk)),jj);
             fprintf('match between %d and %d\n',jj,ii)
             goodmatch = true;
+
         end
     end
 end
+
+%%%%%% DEBUG stuff
+if (false)
+    figure(9)
+    hold on; axis equal;
+    for qq = 1:length(featuresSeenAtPose1)
+        scatter(pointCloud1(1,qq),pointCloud1(2,qq),'r')
+        text(pointCloud1(1,qq),pointCloud1(2,qq)+1,num2str(featuresSeenAtPose1(qq)));
+    end
+    for qq= 1:length(featuresSeenAtPose2)
+        scatter(pNew(1,qq),pNew(2,qq),'b')
+        text(pNew(1,qq),pNew(2,qq)-1,num2str(featuresSeenAtPose2(qq)));
+    end
+    keyboard
+    close(9)
+end
+        

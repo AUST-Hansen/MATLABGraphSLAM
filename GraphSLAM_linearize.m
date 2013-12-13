@@ -24,10 +24,10 @@ xhat = zeros(stateSize,1);
 G = zeros(stateSize);
 %processNoise = diag([1e-10,1e-10,1e-9,1e-9,1e-9,1e-8]);
 processNoise = 1e-6*eye(stateSize);
-processNoise(3,3) = 1e-6;
-processNoise(4,4) = 1e-6;
+processNoise(3,3) = 1e-7;
+processNoise(4,4) = 1e-7;
 processNoise(5,5) = 1e-4;
-processNoise(end,end) = 1e-10;
+processNoise(end,end) = 1e-6;
 %% Motion model
 for ii = 1:Nstates-1
     dT = (timeStamps(ii+1) - timeStamps(ii));
@@ -44,7 +44,7 @@ for ii = 1:Nstates-1
     
     G(1:2,1:2) = eye(2);
     G(1:2,3:4) = berg_R_veh*dT;
-    G(3:4,3:4) = eye(2);%*(1-dT);
+    G(3:4,3:4) = eye(2)*(1-dT);
     G(5:6,5:6) = eye(2);
     G(5,6) = -dT;
     % add information to Omega and zeta
@@ -168,7 +168,7 @@ for ii = 1:Nstates
     
 %     %% omega:
     % initial idea: 2*sigma = .01, so sigma = .005. 1/.005^2 = 40000
-    penalty = 000; % 1/covariance of expected measurement
+    penalty = 0; % 1/covariance of expected measurement
     % Penalize large omega
     Homega = [0 0 0 0 0 1];
     zMeasOmega = stateEstimate(6,ii);
@@ -177,7 +177,7 @@ for ii = 1:Nstates
     zeta(ii*stateSize-5:ii*stateSize) = zeta(ii*stateSize-5:ii*stateSize) + penalty*Homega'*(zMeasOmega - zExpOmega + Homega*stateEstimate(:,ii));
     %% dvl
     dvlMeas = dvlReadings(ii) ;
-    Qdvl = 1e-4;
+    Qdvl = 1e-5;
     for jDvl = 1:dvl.numBeams
         if(~isnan(dvlMeas.ranges(jDvl))) % valid return
             

@@ -321,11 +321,19 @@ title('estimated path')
 [R,T,ERR] = icp(trueIgnxCloud(:,1:10:end),[-mapEsts(2,:);mapEsts(1,:);mapEsts(3,:)],'WorstRejection',.1);
 rotatedMap = R*mapEsts + repmat(T,1,size(mapEsts,2));
 rotatedTrack = R(1:2,1:2)*stateHist(1:2,:) + repmat(T(1:2),1,size(stateHist,2));
+%%
 figure(15); 
+
+trueIgnxCloudBeg = trueIgnxCloud(:,meas_ind(meas_ind(:,1)~=-17));
+
+trueIgnxCloudEnd = trueIgnxCloud(:,meas_ind(meas_ind(:,741)~=-17));
 
 plot(xVehBergframe(1,:) - xVehBergframe(1,1)  ,xVehBergframe(2,:) - xVehBergframe(2,1),'g')
 hold on; axis equal
 scatter(trueIgnxCloud(1,:),trueIgnxCloud(2,:),ones(1,size(trueIgnxCloud,2)),'g')
+scatter(trueIgnxCloudBeg(1,:),trueIgnxCloudBeg(2,:),'ro')
+scatter(trueIgnxCloudEnd(1,:),trueIgnxCloudEnd(2,:),'b+')
+
 plot(-rotatedTrack(2,:),rotatedTrack(1,:),'k')
 scatter(-rotatedMap(2,:),rotatedMap(1,:),ones(1,size(rotatedMap,2)),'k')
 legend('initial estimate','after being pushed through information form','truth','after one iteration of correspondence')
