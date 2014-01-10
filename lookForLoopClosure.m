@@ -16,7 +16,7 @@ for ii = jj+1:size(measurementTimestamps,2)
     featuresSeenAtPose2 = c_i_t(pose2FeatureIndex,ii);
     pointCloud2 = rangeMeasurements(:,featuresSeenAtPose2);
     % do icp
-    [R,T,ERR] = icp(pointCloud1,pointCloud2,'WorstRejection',.4);
+    [R,T,ERR] = icp(pointCloud1,pointCloud2 + repmat([20;20;20],1,size(pointCloud2,2)),'WorstRejection',.0001);
     %[R,T,ERR] = icp(pointCloud1,pointCloud2);  
     resids(ii) = ERR(end);
     if(mod(ii,50) == 0)
@@ -59,8 +59,10 @@ if (false)
     end
     for qq= 1:length(featuresSeenAtPose2)
         scatter(pNew(1,qq),pNew(2,qq),'b')
+        scatter(pointCloud2(1,qq),pointCloud2(2,qq),'g')
         text(pNew(1,qq),pNew(2,qq)-1,num2str(featuresSeenAtPose2(qq)));
     end
+      
     keyboard
     close(9)
 end

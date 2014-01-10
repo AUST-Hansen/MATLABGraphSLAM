@@ -13,29 +13,30 @@ clear all; close all; clc;
 pause on
 %% Constant parameters
 % File to read
-filename = 'RandomTrajectories/WallFollowingTraj2.mat';
-%filename = 'RandomTrajectories/WideAngleWallFollowingTraj1.mat';
+%filename = 'RandomTrajectories/WallFollowingTraj2.mat';
+filename = 'RandomTrajectories/WideAngleWallFollowingTraj1.mat';
 % Number of points to use
 % startIdx and endIdx will be used for all data. skip will only be applied to
 % range data, to allow a sparser map of observed features.
 startIdx = 1; % for now, this must be 1
 skip = 1;     % for now, this must be 1 also
-rangeSkip = 1;
-poseSkip = 10;
-endIdx = 800;
+rangeSkipReson = 10;
+rangeSkipImagenex = 1;
+poseSkip = 5;
+endIdx = 750;
 stateSize = 6;
 % Imagenex matching parameters
 ignx_sparsity = 3;
 scanmatch_threshold = 20; % only look for matches within this many meters of pose difference
-scanmatch_RMStolerance = 2.5;
-scanmatch_probThreshold = 1; 
+scanmatch_RMStolerance = 1.;
+scanmatch_probThreshold = 1.; 
 % Use imagenex, multibeam and DVL ranges in observations?
 useDVLRanges = false;
 useMultibeamRanges = false;
 useImagenexData = true;
 % give loop closure a few iterations to do its thing
-lcAllowance = 2;
-MAX_ITER = 40;
+lcAllowance = 0;
+MAX_ITER = 45;
 %% Read in Data
 fprintf('Reading in Data...\n')
 addpath ..
@@ -54,9 +55,9 @@ fprintf('Reson...\n')
 % integrate high rate pose data but not deal with as many map features if
 % we don't want to.
 fprintf('Cleaning and formatting data...\n')
-[measurementTimestamps, rangeMeasurements, c_i_t, meas_ind] = cleanMeasurements(timeSteps(1:skip:endIdx),sensor,rangeData(:,startIdx:skip:endIdx),useMultibeamRanges,imagenex,imagenexData(:,startIdx:skip:endIdx),useImagenexData,dvl,dvlData(startIdx:skip:endIdx),useDVLRanges,rangeSkip,poseSkip);
+[measurementTimestamps, rangeMeasurements, c_i_t, meas_ind] = cleanMeasurements(timeSteps(1:skip:endIdx),sensor,rangeData(:,startIdx:skip:endIdx),useMultibeamRanges,imagenex,imagenexData(:,startIdx:skip:endIdx),useImagenexData,dvl,dvlData(startIdx:skip:endIdx),useDVLRanges,rangeSkipReson,rangeSkipImagenex,poseSkip);
 %% try to identify loop closure
-c_i_t = lookForLoopClosure(c_i_t,rangeMeasurements,measurementTimestamps,scanmatch_probThreshold);
+%c_i_t = lookForLoopClosure(c_i_t,rangeMeasurements,measurementTimestamps,scanmatch_probThreshold);
 %--------------------------------------------------------------------------
 %% Form input vectors  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Extract angular velocity of vehicle in inertial as a control input
@@ -68,6 +69,7 @@ v_commanded = [v_vehicle_inertial, v_vehicle_inertial(end)];
 omega_vehicle = diff(euler_obs_t(3,startIdx:endIdx))./diff(timeSteps(startIdx:endIdx));
 omega_vehicle = [omega_vehicle, omega_vehicle(end)]; % not really needed, but makes omega same length as timeSteps
 inputs = [v_commanded; omega_vehicle];
+tstart = tic;
 %% Run GraphSLAM
 fprintf('Begin GraphSLAM...\n')
 fprintf('Initializing...\n')
@@ -150,15 +152,16 @@ DEBUGflag = false;
 c_i_t_last = c_i_t;
 figure(10);spy(Omega)
 
-
+lastMu = mu(1:stateSize*(endIdx-startIdx));
+figure(20); hold on; title('trajectory resids')
 while (itimeout < MAX_ITER) 
     
     % Test correspondences for imagenex scan matching.
     c_i_t_last = c_i_t;
     mu_last = mu;
-    if itimeout>lcAllowance
+    if itimeout>=lcAllowance
         %c_i_t = meas_ind; % TODO: only reset once
-        [c_i_t] = GraphSLAMcorrespondenceViaScanMatch(mu,c_i_t,scanmatch_threshold,scanmatch_probThreshold,scanmatch_RMStolerance,meas_ind,rangeMeasurements);
+        [c_i_t] = GraphSLAMcorrespondenceViaScanMatch(mu,c_i_t,scanmatch_threshold,scanmatch_probThreshold,scanmatch_RMStolerance,meas_ind,rangeMeasurements,imagenex,rangeSkipImagenex);
     end
         % linearize
     fprintf('Linearizing...\n')
@@ -223,6 +226,8 @@ while (itimeout < MAX_ITER)
         title('iceberg angular velocity')
         legend('estimated','actual');
         figure(6); spy(Omega)
+        figure(20); hold on; scatter(itimeout,norm(mu(1:stateSize*(endIdx-startIdx)) - lastMu))
+        lastMu = mu(1:stateSize*(endIdx-startIdx));
        drawnow()
        
    end
@@ -246,8 +251,11 @@ while (itimeout < MAX_ITER)
         break;
     end
    %keyboard
-   %c_i_t = c_i_t_last;
+   c_i_t = c_i_t_last;
+   reinitializeMapEstimate = GraphSLAM_initializeMap(reshape(mu(1:stateSize*(endIdx-startIdx)),6,[]),rangeMeasurements,c_i_t);
+   mu = [mu(1:stateSize*(endIdx-startIdx));reshape(reinitializeMapEstimate,[],1)];
 end
+totalTime = toc(tstart)
 
 %% Print a whole buncha crap
       fig3=figure(3);
@@ -277,7 +285,8 @@ end
 %                 scatter(-mapEsts(2,c_i_t_last(plotFeatures,qq)),mapEsts(1,c_i_t_last(plotFeatures,qq)), ones(size(mapEsts(1,c_i_t_last(plotFeatures,qq)))))
 %                 drawnow()
 %               end
-         end
+          end
+%%
          figure(4); plot(stateHist(3:end,:)')
          hold on;
          plot(euler_obs_t(3,1:endIdx) - euler_berg_t(3,1:endIdx) - pi/2,'g')
@@ -292,6 +301,7 @@ end
         title('iceberg angular velocity')
         legend('estimated','actual');
         figure(6); spy(Omega)
+        
        drawnow()
 
 %stateHist = reshape(Omega(1:endIdx*6,1:endIdx*6)\zeta(1:endIdx*6),6,[]);
@@ -324,15 +334,15 @@ rotatedTrack = R(1:2,1:2)*stateHist(1:2,:) + repmat(T(1:2),1,size(stateHist,2));
 %%
 figure(15); 
 
-trueIgnxCloudBeg = trueIgnxCloud(:,meas_ind(meas_ind(:,1)~=-17));
+%trueIgnxCloudBeg = trueIgnxCloud(:,meas_ind(meas_ind(:,1)~=-17));
 
-trueIgnxCloudEnd = trueIgnxCloud(:,meas_ind(meas_ind(:,741)~=-17));
+%trueIgnxCloudEnd = trueIgnxCloud(:,meas_ind(meas_ind(:,741)~=-17));
 
 plot(xVehBergframe(1,:) - xVehBergframe(1,1)  ,xVehBergframe(2,:) - xVehBergframe(2,1),'g')
 hold on; axis equal
 scatter(trueIgnxCloud(1,:),trueIgnxCloud(2,:),ones(1,size(trueIgnxCloud,2)),'g')
-scatter(trueIgnxCloudBeg(1,:),trueIgnxCloudBeg(2,:),'ro')
-scatter(trueIgnxCloudEnd(1,:),trueIgnxCloudEnd(2,:),'b+')
+%scatter(trueIgnxCloudBeg(1,:),trueIgnxCloudBeg(2,:),'ro')
+%scatter(trueIgnxCloudEnd(1,:),trueIgnxCloudEnd(2,:),'b+')
 
 plot(-rotatedTrack(2,:),rotatedTrack(1,:),'k')
 scatter(-rotatedMap(2,:),rotatedMap(1,:),ones(1,size(rotatedMap,2)),'k')

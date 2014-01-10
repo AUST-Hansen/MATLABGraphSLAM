@@ -1,4 +1,4 @@
-function [measurementTimestamps, rangeMeasurements, c_i_t,meas_ind] = cleanMeasurements(timeSteps,multibeam,multibeamData,useMultibeam,imagenex,imagenexData,useImagenex,dvl,dvlData,useDVL,rangeSkip,poseSkip)
+function [measurementTimestamps, rangeMeasurements, c_i_t,meas_ind] = cleanMeasurements(timeSteps,multibeam,multibeamData,useMultibeam,imagenex,imagenexData,useImagenex,dvl,dvlData,useDVL,rangeSkipReson,rangeSkipImagenex,poseSkip)
 
    % rangeSkip gives density in beams
    % poseSkip gives how long to wait between imagenex for matching.
@@ -10,30 +10,9 @@ function [measurementTimestamps, rangeMeasurements, c_i_t,meas_ind] = cleanMeasu
    % for each timestep
    for i_time = 1:poseSkip:N
        correspondenceCounter = 1;
-       % check multibeam
-       if (useMultibeam)
-       for jj = 1:rangeSkip:multibeam.numBeams
-                  % rotation from beam frame to sensor frame
-          S_R_B       = [ cos(multibeam.az(jj))  , -sin(multibeam.az(jj)), 0   ;
-                          sin(multibeam.az(jj))  , cos(multibeam.az(jj)), 0   ;
-                          0                   , 0                 , 1  ];
-          if (multibeamData(jj,i_time) ~= -17 && ~isnan(multibeamData(jj,i_time)) &&  multibeamData(jj,i_time) < multibeam.maxRange)
-              % valid reading!
-              j_validMeas = j_validMeas+1;
-              % rotation matrix
-              v_R_beam = multibeam.Veh_R_sen*S_R_B;
-              % rotate into vehicle frame
-              beamInVehicleFrame = v_R_beam(:,1)*multibeamData(jj,i_time);
-              [r,b,elev] = getRBE(beamInVehicleFrame);
-              rangeMeasurements(:,j_validMeas) = [r,b,elev]';
-              c_i_t(correspondenceCounter,i_time) = j_validMeas;
-              correspondenceCounter = correspondenceCounter+1;
-          end
-       end
-       end
-       
+
        if(useImagenex)
-       for jj = 1:rangeSkip:imagenex.numBeams
+       for jj = 1:rangeSkipImagenex:imagenex.numBeams
                   % rotation from beam frame to sensor frame
           S_R_B       = [ cos(imagenex.az(jj))  , -sin(imagenex.az(jj)), 0   ;
                           sin(imagenex.az(jj))  , cos(imagenex.az(jj)), 0   ;
@@ -55,6 +34,31 @@ function [measurementTimestamps, rangeMeasurements, c_i_t,meas_ind] = cleanMeasu
        end
        end
        
+       
+       % check multibeam
+       if (useMultibeam)
+       for jj = 1:rangeSkipReson:multibeam.numBeams
+                  % rotation from beam frame to sensor frame
+          S_R_B       = [ cos(multibeam.az(jj))  , -sin(multibeam.az(jj)), 0   ;
+                          sin(multibeam.az(jj))  , cos(multibeam.az(jj)), 0   ;
+                          0                   , 0                 , 1  ];
+          if (multibeamData(jj,i_time) ~= -17 && ~isnan(multibeamData(jj,i_time)) &&  multibeamData(jj,i_time) < multibeam.maxRange)
+              % valid reading!
+              j_validMeas = j_validMeas+1;
+              % rotation matrix
+              v_R_beam = multibeam.Veh_R_sen*S_R_B;
+              % rotate into vehicle frame
+              beamInVehicleFrame = v_R_beam(:,1)*multibeamData(jj,i_time);
+              [r,b,elev] = getRBE(beamInVehicleFrame);
+              %rangeMeasurements(:,j_validMeas) = [r,b,elev]';
+              rangeMeasurements(:,j_validMeas) = beamInVehicleFrame;
+              c_i_t(correspondenceCounter,i_time) = j_validMeas;
+              correspondenceCounter = correspondenceCounter+1;
+          end
+       end
+       end
+              
+       
        if (useDVL)
        for jj = 1:dvl.numBeams
                   % rotation from beam frame to sensor frame
@@ -62,12 +66,11 @@ function [measurementTimestamps, rangeMeasurements, c_i_t,meas_ind] = cleanMeasu
           if (dvlData(i_time).ranges(jj) ~= -17 && ~isnan(dvlData(i_time).ranges(jj)) && dvlData(i_time).ranges(jj) < dvl.maxRange)
               % valid reading!
               j_validMeas = j_validMeas+1;
-              % rotation matrix
-              v_R_beam = imagenex.Veh_R_sen*S_R_B;
               % rotate into vehicle frame
-              beamInVehicleFrame = v_R_beam(:,1)*imagenexData(jj,i_time);
-              [r,b,elev] = getRBE(beamInVehicleFrame);
-              rangeMeasurements(:,j_validMeas) = [r,b,elev]';
+              beamInVehicleFrame = (dvl.Veh_R_dvl*dvl.beamsVF(:,jj))*dvlData(i_time).ranges(jj);
+              %[r,b,elev] = getRBE(beamInVehicleFrame);
+              %rangeMeasurements(:,j_validMeas) = [r,b,elev]';
+              rangeMeasurements(:,j_validMeas) = beamInVehicleFrame;
               c_i_t(correspondenceCounter,i_time) = j_validMeas;
               correspondenceCounter = correspondenceCounter+1;
           end

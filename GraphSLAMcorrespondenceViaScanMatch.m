@@ -1,4 +1,4 @@
-function [c_i_t_new] = GraphSLAMcorrespondenceViaScanMatch(mu,c_i_t,posThreshold,probThreshold,RMStolerance,measIndices,rangeMeasurements)
+function [c_i_t_new] = GraphSLAMcorrespondenceViaScanMatch(mu,c_i_t,posThreshold,probThreshold,RMStolerance,measIndices,rangeMeasurements,imagenex,imagenexSkip)
 
 % initialize c_i_t output
 c_i_t_new = c_i_t;
@@ -10,15 +10,21 @@ mapFeatures = reshape(mu(stateSize*Nstates+1:end),3,[]);
 
 for ii = 1:Nstates
     pos1 = stateHist(1:2,ii);
+    heading1 = stateHist(5,ii);
+    berg_R_veh1 = [cos(heading1), -sin(heading1) 0; sin(heading1), cos(heading1), 0;0,0,1];
     pose1FeatureIndex = find (c_i_t(:,ii)~=-17);
     featuresSeenAtPose1 = c_i_t(pose1FeatureIndex,ii);
-    pointCloud1 = mapFeatures(:,featuresSeenAtPose1);
-    %pointCloud1 = rangeMeasurements(:,measIndices(measIndices(:,ii)~=-17,ii));
+    %pointCloud1 = mapFeatures(:,featuresSeenAtPose1);
+    pointCloud1 = rangeMeasurements(:,measIndices(measIndices(1:floor(imagenex.numBeams/imagenexSkip),ii)~=-17,ii));
+    pointCloudA = berg_R_veh1*pointCloud1 + repmat([pos1;0],1,size(pointCloud1,2));
+    pointCloud1 = pointCloudA;
     for jj = ii+1:Nstates
-        if (sum(c_i_t(:,ii) ~= -17) == 0)
+        if (sum(c_i_t(1:floor(imagenex.numBeams/imagenexSkip),ii) ~= -17) == 0)
             continue
         end
         pos2 = stateHist(1:2,jj);
+        heading2 = stateHist(5,jj);
+        berg_R_veh2 = [cos(heading2), -sin(heading2) 0; sin(heading2), cos(heading2), 0;0,0,1];
         % are they close-ish?
         % if they're close and EITHER not far apart in time, or we're
         % looking for loop closure with first few soundings
@@ -28,10 +34,12 @@ for ii = 1:Nstates
             end
             pose2FeatureIndex = find (c_i_t(:,jj)~=-17);
             featuresSeenAtPose2 = c_i_t(pose2FeatureIndex,jj);
-            pointCloud2 = mapFeatures(:,featuresSeenAtPose2);
-            %pointCloud2 = rangeMeasurements(:,measIndices(measIndices(:,jj)~=-17,jj));
+            %pointCloud2 = mapFeatures(:,featuresSeenAtPose2);
+            pointCloud2 = rangeMeasurements(:,measIndices(measIndices(1:floor(imagenex.numBeams/imagenexSkip),jj)~=-17,jj));
+            pointCloudB = berg_R_veh2*pointCloud2 + repmat([pos2;0],1,size(pointCloud2,2));
+            pointCloud2 = pointCloudB;
             % Do ICP
-            [R,T,ERR] = icp(pointCloud1,pointCloud2,'WorstRejection',.4);
+            [R,T,ERR] = icp(pointCloud1,pointCloud2,'WorstRejection',.1);
             ERR
             pNew = R*pointCloud2 + repmat(T,1,size(pointCloud2,2));
             % Do KNN

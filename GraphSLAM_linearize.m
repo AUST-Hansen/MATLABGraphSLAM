@@ -16,18 +16,18 @@ Omega(2,2) = 1e13;
 Omega(3,3) = 1;
 Omega(4,4) = 1;
 Omega(5,5) = 1e13;
-Omega(6,6) = 1; % TODO: reduce this
+Omega(6,6) = 1e1; % TODO: reduce this
 % ininitialize zeta
 zeta = zeros(stateSize*Nstates + 3*NmapFeatures,1);
 zeta(1:6) = [0 0 inputs(1,1) 0 0 0]';
 xhat = zeros(stateSize,1);
 G = zeros(stateSize);
 %processNoise = diag([1e-10,1e-10,1e-9,1e-9,1e-9,1e-8]);
-processNoise = 1e-6*eye(stateSize);
-processNoise(3,3) = 1e-7;
-processNoise(4,4) = 1e-7;
+processNoise = 1e-5*eye(stateSize);
+processNoise(3,3) = 1e-4;
+processNoise(4,4) = 1e-4;
 processNoise(5,5) = 1e-4;
-processNoise(end,end) = 1e-6;
+processNoise(end,end) = 1e-7;
 %% Motion model
 for ii = 1:Nstates-1
     dT = (timeStamps(ii+1) - timeStamps(ii));
@@ -89,7 +89,7 @@ for ii = 1:Nstates
             %Qinv = inv(RCov'*QrangeBeamframe*RCov);
 
             Qinv = 1000*eye(3);
-            
+
             xDiff = mapEstimate(1:2,j) - stateEstimate(1:2,ii);
             zHat = B_R_V'*[xDiff;0];
             zMeas = rangeMeasurements(:,measIndex);
@@ -168,7 +168,7 @@ for ii = 1:Nstates
     
 %     %% omega:
     % initial idea: 2*sigma = .01, so sigma = .005. 1/.005^2 = 40000
-    penalty = 0; % 1/covariance of expected measurement
+    penalty = 00; % 1/covariance of expected measurement
     % Penalize large omega
     Homega = [0 0 0 0 0 1];
     zMeasOmega = stateEstimate(6,ii);
@@ -177,7 +177,7 @@ for ii = 1:Nstates
     zeta(ii*stateSize-5:ii*stateSize) = zeta(ii*stateSize-5:ii*stateSize) + penalty*Homega'*(zMeasOmega - zExpOmega + Homega*stateEstimate(:,ii));
     %% dvl
     dvlMeas = dvlReadings(ii) ;
-    Qdvl = 1e-5;
+    Qdvl = 1e-6;
     for jDvl = 1:dvl.numBeams
         if(~isnan(dvlMeas.ranges(jDvl))) % valid return
             
