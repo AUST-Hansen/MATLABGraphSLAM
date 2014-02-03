@@ -28,7 +28,7 @@ stateSize = 6;
 % Imagenex matching parameters
 ignx_sparsity = 3;
 scanmatch_threshold = 20; % only look for matches within this many meters of pose difference
-scanmatch_RMStolerance = 1.;
+scanmatch_RMStolerance = 2.;
 scanmatch_probThreshold = 1.; 
 % Use imagenex, multibeam and DVL ranges in observations?
 useDVLRanges = false;
@@ -81,7 +81,7 @@ initialMapEstimate = GraphSLAM_initializeMap(initialStateEstimate,rangeMeasureme
 initialFullStateEstimate = [reshape(initialStateEstimate,[],1); reshape(initialMapEstimate,[],1)];
 %% Calculate inzformation form of full posterior
 fprintf('Linearizing...\n')
-[Omega,zeta] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,c_i_t,meas_ind,initialFullStateEstimate,false);
+[Omega,zeta] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,c_i_t,meas_ind,initialFullStateEstimate,false,false,[]);
 %% initial testing stuff
 %stateHist = reshape(Omega(1:endIdx*6,1:endIdx*6)\zeta(1:endIdx*6),6,[]);
 figure(1);
@@ -154,6 +154,8 @@ figure(10);spy(Omega)
 
 lastMu = mu(1:stateSize*(endIdx-startIdx));
 figure(20); hold on; title('trajectory resids')
+useRelHeading = false;
+relHeading = [];
 while (itimeout < MAX_ITER) 
     
     % Test correspondences for imagenex scan matching.
@@ -161,13 +163,15 @@ while (itimeout < MAX_ITER)
     mu_last = mu;
     if itimeout>=lcAllowance
         %c_i_t = meas_ind; % TODO: only reset once
-        [c_i_t] = GraphSLAMcorrespondenceViaScanMatch(mu,c_i_t,scanmatch_threshold,scanmatch_probThreshold,scanmatch_RMStolerance,meas_ind,rangeMeasurements,imagenex,rangeSkipImagenex);
+        [c_i_t, relHeading] = GraphSLAMcorrespondenceViaScanMatch(mu,c_i_t,scanmatch_threshold,scanmatch_probThreshold,scanmatch_RMStolerance,meas_ind,rangeMeasurements,imagenex,rangeSkipImagenex);
+        useRelHeading = true;
+        
     end
         % linearize
     fprintf('Linearizing...\n')
     clear Omega
     clear Sigma
-    [Omega,zeta,c_i_t] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,c_i_t,meas_ind,mu,true);
+    [Omega,zeta,c_i_t] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,c_i_t,meas_ind,mu,true,useRelHeading,relHeading);
     % reduce
 %%
     fprintf('Reducing...\n')

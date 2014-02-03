@@ -1,4 +1,4 @@
-function [Omega,zeta,c_i_t_new] = GraphSLAM_linearize(timeStamps,inputs,measTimestamps,sensor,rangeMeasurements,dvl,dvlReadings,correspondences,meas_ind,fullStateEstimate,haveInitialized)
+function [Omega,zeta,c_i_t_new] = GraphSLAM_linearize(timeStamps,inputs,measTimestamps,sensor,rangeMeasurements,dvl,dvlReadings,correspondences,meas_ind,fullStateEstimate,haveInitialized,useRelHeading,relHeading)
 
 Nstates = size(timeStamps,2);
 stateSize = 6;
@@ -16,7 +16,7 @@ Omega(2,2) = 1e13;
 Omega(3,3) = 1;
 Omega(4,4) = 1;
 Omega(5,5) = 1e13;
-Omega(6,6) = 1e1; % TODO: reduce this
+Omega(6,6) = 1e4; % TODO: reduce this
 % ininitialize zeta
 zeta = zeros(stateSize*Nstates + 3*NmapFeatures,1);
 zeta(1:6) = [0 0 inputs(1,1) 0 0 0]';
@@ -24,10 +24,11 @@ xhat = zeros(stateSize,1);
 G = zeros(stateSize);
 %processNoise = diag([1e-10,1e-10,1e-9,1e-9,1e-9,1e-8]);
 processNoise = 1e-5*eye(stateSize);
-processNoise(3,3) = 1e-4;
-processNoise(4,4) = 1e-4;
+processNoise(3,3) = 1e-5;
+processNoise(4,4) = 1e-5;
 processNoise(5,5) = 1e-4;
-processNoise(end,end) = 1e-7;
+processNoise(end,end) = 1e-6;
+QinvSM =5;
 %% Motion model
 for ii = 1:Nstates-1
     dT = (timeStamps(ii+1) - timeStamps(ii));
@@ -54,7 +55,25 @@ for ii = 1:Nstates-1
     
     zeta((ii-1)*stateSize+1:(ii+1)*stateSize) = zeta((ii-1)*stateSize+1:(ii+1)*stateSize) +...
         [-G'; eye(stateSize)]*(processNoise\(xhat - G*stateEstimate(:,ii)));
-
+    
+    if(useRelHeading)
+        for jj = ii+1:Nstates
+            if (relHeading.validMatch(ii,jj) == 1)
+                if (abs(stateEstimate(5,jj) - stateEstimate(5,ii) - 2*pi) < .5 ) % deal with wrapping
+                    Omega(stateSize*ii-1:stateSize*ii-1) = Omega(stateSize*ii-1:stateSize*ii-1) + QinvSM;
+                    Omega(stateSize*jj-1:stateSize*jj-1) = Omega(stateSize*jj-1:stateSize*jj-1) + QinvSM;
+                    zeta(stateSize*jj-1) = zeta(stateSize*jj-1) + QinvSM*(relHeading.deltaHeading(ii,jj)+2*pi);
+                    zeta(stateSize*ii-1) = zeta(stateSize*ii-1) - QinvSM*(relHeading.deltaHeading(ii,jj)+2*pi)  ;
+                    
+                else
+                    Omega(stateSize*ii-1:stateSize*ii-1) = Omega(stateSize*ii-1:stateSize*ii-1) + QinvSM;
+                    Omega(stateSize*jj-1:stateSize*jj-1) = Omega(stateSize*jj-1:stateSize*jj-1) + QinvSM;
+                    zeta(stateSize*jj-1) = zeta(stateSize*jj-1) + QinvSM*relHeading.deltaHeading(ii,jj);
+                    zeta(stateSize*ii-1) = zeta(stateSize*ii-1) - QinvSM*relHeading.deltaHeading(ii,jj);
+                end
+            end
+        end
+    end
 end
 
 %% Measurements
