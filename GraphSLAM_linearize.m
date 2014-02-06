@@ -1,4 +1,4 @@
-function [Omega,zeta,c_i_t_new] = GraphSLAM_linearize(timeStamps,inputs,measTimestamps,sensor,rangeMeasurements,dvl,dvlReadings,correspondences,meas_ind,fullStateEstimate,haveInitialized,useRelHeading,relHeading)
+function [Omega,zeta,c_i_t_new] = GraphSLAM_linearize(timeStamps,inputs,measTimestamps,sensor,rangeMeasurements,dvl,dvlReadings,correspondences,meas_ind,fullStateEstimate,haveInitialized,useRelHeading,relHeading,LCobj)
 
 Nstates = size(timeStamps,2);
 stateSize = 6;
@@ -24,10 +24,10 @@ xhat = zeros(stateSize,1);
 G = zeros(stateSize);
 %processNoise = diag([1e-10,1e-10,1e-9,1e-9,1e-9,1e-8]);
 processNoise = 1e-5*eye(stateSize);
-processNoise(3,3) = 1e-5;
-processNoise(4,4) = 1e-5;
-processNoise(5,5) = 1e-4;
-processNoise(end,end) = 1e-6;
+processNoise(3,3) = 1e-6;
+processNoise(4,4) = 1e-6;
+processNoise(5,5) = 1e-5;
+processNoise(end,end) = 1e-7;
 QinvSM =5;
 %% Motion model
 for ii = 1:Nstates-1
@@ -74,6 +74,66 @@ for ii = 1:Nstates-1
             end
         end
     end
+end
+
+%% Loop closure
+if (~isempty(LCobj))
+    % translation
+    z = LCobj.T_1_2(1:2);
+    H = [eye(2), zeros(2,4),   -eye(2), zeros(2,4)];
+    muVec = [stateEstimate(:,LCobj.idx1); stateEstimate(:,LCobj.idx2)];
+    zHat = H*muVec;
+    QinvX = 100*eye(2);
+    CovAdd = H'*QinvX*H;
+    zetaAdd = H'*QinvX*(z - zHat + H*muVec); % redundant, since this measurement is linear
+    % Add it to the matrices
+    ii = LCobj.idx1;
+    jj = LCobj.idx2;
+    % add info to omega
+    Omega(ii*stateSize-5:ii*stateSize,ii*stateSize-5:ii*stateSize) = ... %self
+        sparse(Omega(ii*stateSize-5:ii*stateSize,ii*stateSize-5:ii*stateSize)...
+        + CovAdd(1:stateSize,1:stateSize));
+    Omega(ii*stateSize-5:ii*stateSize,jj*stateSize-5:jj*stateSize) = ... %self
+        sparse(Omega(ii*stateSize-5:ii*stateSize,jj*stateSize-5:jj*stateSize)...
+        + CovAdd(1:stateSize,stateSize+1:end));
+    Omega(jj*stateSize-5:jj*stateSize,ii*stateSize-5:ii*stateSize) = ... %self
+        sparse(Omega(jj*stateSize-5:jj*stateSize,ii*stateSize-5:ii*stateSize)...
+        + CovAdd(stateSize+1:end,1:stateSize));    
+    Omega(jj*stateSize-5:jj*stateSize,jj*stateSize-5:jj*stateSize) = ... %self
+        sparse(Omega(jj*stateSize-5:jj*stateSize,jj*stateSize-5:jj*stateSize)...
+        + CovAdd(stateSize+1:end,stateSize+1:end));
+    % Add info to zeta
+    zeta((ii-1)*stateSize+1:(ii)*stateSize) = zeta((ii-1)*stateSize+1:(ii)*stateSize) +...
+        + zetaAdd(1:stateSize);
+    zeta((jj-1)*stateSize+1:(jj)*stateSize) = zeta((jj-1)*stateSize+1:(jj)*stateSize) +...
+        + zetaAdd(stateSize+1:end);    
+%     % rotation
+%     z = -asin(LCobj.R_1_2(2,1)); % "measured" delta psi
+%     H = [0 0 0 0 1 0 0 0 0 0 -1 0];
+%     muVec = [stateEstimate(:,LCobj.idx1); stateEstimate(:,LCobj.idx2)];
+%     R12hat = Euler2RotMat(0,0,stateEstimate(5,LCobj.idx1))'*Euler2RotMat(0,0,stateEstimate(5,LCobj.idx2)) ;
+%     zHat = asin(R12hat(2,1));
+%     QinvX = 10;
+%     CovAdd = H'*QinvX*H;
+%     zetaAdd = H'*QinvX*(z - zHat + mod(H*muVec,2*pi)); 
+%     % add info to omega
+%     Omega(ii*stateSize-5:ii*stateSize,ii*stateSize-5:ii*stateSize) = ... %self
+%         sparse(Omega(ii*stateSize-5:ii*stateSize,ii*stateSize-5:ii*stateSize)...
+%         + CovAdd(1:stateSize,1:stateSize));
+%     Omega(ii*stateSize-5:ii*stateSize,jj*stateSize-5:jj*stateSize) = ... %self
+%         sparse(Omega(ii*stateSize-5:ii*stateSize,jj*stateSize-5:jj*stateSize)...
+%         + CovAdd(1:stateSize,stateSize+1:end));
+%     Omega(jj*stateSize-5:jj*stateSize,ii*stateSize-5:ii*stateSize) = ... %self
+%         sparse(Omega(jj*stateSize-5:jj*stateSize,ii*stateSize-5:ii*stateSize)...
+%         + CovAdd(stateSize+1:end,1:stateSize));    
+%     Omega(jj*stateSize-5:jj*stateSize,jj*stateSize-5:jj*stateSize) = ... %self
+%         sparse(Omega(jj*stateSize-5:jj*stateSize,jj*stateSize-5:jj*stateSize)...
+%         + CovAdd(stateSize+1:end,stateSize+1:end));
+%     % Add info to zeta
+%     zeta((ii-1)*stateSize+1:(ii)*stateSize) = zeta((ii-1)*stateSize+1:(ii)*stateSize) +...
+%         + zetaAdd(1:stateSize);
+%     zeta((jj-1)*stateSize+1:(jj)*stateSize) = zeta((jj-1)*stateSize+1:(jj)*stateSize) +...
+%         + zetaAdd(stateSize+1:end);    
 end
 
 %% Measurements

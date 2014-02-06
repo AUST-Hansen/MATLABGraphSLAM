@@ -20,23 +20,23 @@ filename = 'RandomTrajectories/WideAngleWallFollowingTraj1.mat';
 % range data, to allow a sparser map of observed features.
 startIdx = 1; % for now, this must be 1
 skip = 1;     % for now, this must be 1 also
-rangeSkipReson = 10;
+rangeSkipReson = 3;
 rangeSkipImagenex = 1;
-poseSkip = 5;
-endIdx = 750;
+poseSkip = 4;
+endIdx = 850;
 stateSize = 6;
 % Imagenex matching parameters
 ignx_sparsity = 3;
-scanmatch_threshold = 20; % only look for matches within this many meters of pose difference
+scanmatch_threshold = 30; % only look for matches within this many meters of pose difference
 scanmatch_RMStolerance = 2.;
-scanmatch_probThreshold = 1.; 
+scanmatch_probThreshold = 1.5; 
 % Use imagenex, multibeam and DVL ranges in observations?
 useDVLRanges = false;
 useMultibeamRanges = false;
 useImagenexData = true;
 % give loop closure a few iterations to do its thing
-lcAllowance = 0;
-MAX_ITER = 45;
+lcAllowance = 1;
+MAX_ITER = 20;
 %% Read in Data
 fprintf('Reading in Data...\n')
 addpath ..
@@ -55,9 +55,15 @@ fprintf('Reson...\n')
 % integrate high rate pose data but not deal with as many map features if
 % we don't want to.
 fprintf('Cleaning and formatting data...\n')
-[measurementTimestamps, rangeMeasurements, c_i_t, meas_ind] = cleanMeasurements(timeSteps(1:skip:endIdx),sensor,rangeData(:,startIdx:skip:endIdx),useMultibeamRanges,imagenex,imagenexData(:,startIdx:skip:endIdx),useImagenexData,dvl,dvlData(startIdx:skip:endIdx),useDVLRanges,rangeSkipReson,rangeSkipImagenex,poseSkip);
+[measurementTimestamps, rangeMeasurements, c_i_t, meas_ind,mbMeas,c_i_t_mb] = cleanMeasurements(timeSteps(1:skip:endIdx),sensor,rangeData(:,startIdx:skip:endIdx),useMultibeamRanges,imagenex,imagenexData(:,startIdx:skip:endIdx),useImagenexData,dvl,dvlData(startIdx:skip:endIdx),useDVLRanges,rangeSkipReson,rangeSkipImagenex,poseSkip);
 %% try to identify loop closure
 %c_i_t = lookForLoopClosure(c_i_t,rangeMeasurements,measurementTimestamps,scanmatch_probThreshold);
+%--------------------------------------------------------------------------
+%% test submap construction
+Submaps = buildSubmaps(processDVL(dvl,dvlData(1:endIdx),true,false),euler_obs_t(:,1:endIdx),50,mbMeas, c_i_t_mb);
+
+LCobj = lookForLoopClosureReson(Submaps);
+
 %--------------------------------------------------------------------------
 %% Form input vectors  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Extract angular velocity of vehicle in inertial as a control input
@@ -81,7 +87,7 @@ initialMapEstimate = GraphSLAM_initializeMap(initialStateEstimate,rangeMeasureme
 initialFullStateEstimate = [reshape(initialStateEstimate,[],1); reshape(initialMapEstimate,[],1)];
 %% Calculate inzformation form of full posterior
 fprintf('Linearizing...\n')
-[Omega,zeta] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,c_i_t,meas_ind,initialFullStateEstimate,false,false,[]);
+[Omega,zeta] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,c_i_t,meas_ind,initialFullStateEstimate,false,false,[],LCobj);
 %% initial testing stuff
 %stateHist = reshape(Omega(1:endIdx*6,1:endIdx*6)\zeta(1:endIdx*6),6,[]);
 figure(1);
@@ -171,7 +177,7 @@ while (itimeout < MAX_ITER)
     fprintf('Linearizing...\n')
     clear Omega
     clear Sigma
-    [Omega,zeta,c_i_t] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,c_i_t,meas_ind,mu,true,useRelHeading,relHeading);
+    [Omega,zeta,c_i_t] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,c_i_t,meas_ind,mu,true,useRelHeading,relHeading,LCobj);
     % reduce
 %%
     fprintf('Reducing...\n')
