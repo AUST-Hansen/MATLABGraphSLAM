@@ -23,20 +23,21 @@ skip = 1;     % for now, this must be 1 also
 rangeSkipReson = 3;
 rangeSkipImagenex = 1;
 poseSkip = 4;
-endIdx = 850;
+endIdx = 750;
 stateSize = 6;
 % Imagenex matching parameters
+addpath ransac
 ignx_sparsity = 3;
-scanmatch_threshold = 30; % only look for matches within this many meters of pose difference
+scanmatch_threshold = 20; % only look for matches within this many meters of pose difference
 scanmatch_RMStolerance = 2.;
-scanmatch_probThreshold = 1.5; 
+scanmatch_probThreshold = 1.; 
 % Use imagenex, multibeam and DVL ranges in observations?
 useDVLRanges = false;
 useMultibeamRanges = false;
 useImagenexData = true;
 % give loop closure a few iterations to do its thing
 lcAllowance = 1;
-MAX_ITER = 20;
+MAX_ITER = 10;
 %% Read in Data
 fprintf('Reading in Data...\n')
 addpath ..
@@ -170,7 +171,7 @@ while (itimeout < MAX_ITER)
     if itimeout>=lcAllowance
         %c_i_t = meas_ind; % TODO: only reset once
         [c_i_t, relHeading] = GraphSLAMcorrespondenceViaScanMatch(mu,c_i_t,scanmatch_threshold,scanmatch_probThreshold,scanmatch_RMStolerance,meas_ind,rangeMeasurements,imagenex,rangeSkipImagenex);
-        useRelHeading = true;
+        useRelHeading = false;
         
     end
         % linearize

@@ -23,11 +23,11 @@ zeta(1:6) = [0 0 inputs(1,1) 0 0 0]';
 xhat = zeros(stateSize,1);
 G = zeros(stateSize);
 %processNoise = diag([1e-10,1e-10,1e-9,1e-9,1e-9,1e-8]);
-processNoise = 1e-5*eye(stateSize);
+processNoise = 1e-4*eye(stateSize);
 processNoise(3,3) = 1e-6;
 processNoise(4,4) = 1e-6;
-processNoise(5,5) = 1e-5;
-processNoise(end,end) = 1e-7;
+processNoise(5,5) = 1e-6;
+processNoise(end,end) = 1e-8;
 QinvSM =5;
 %% Motion model
 for ii = 1:Nstates-1
@@ -57,17 +57,28 @@ for ii = 1:Nstates-1
         [-G'; eye(stateSize)]*(processNoise\(xhat - G*stateEstimate(:,ii)));
     
     if(useRelHeading)
+        fprintf('relHeading\n')
         for jj = ii+1:Nstates
             if (relHeading.validMatch(ii,jj) == 1)
                 if (abs(stateEstimate(5,jj) - stateEstimate(5,ii) - 2*pi) < .5 ) % deal with wrapping
-                    Omega(stateSize*ii-1:stateSize*ii-1) = Omega(stateSize*ii-1:stateSize*ii-1) + QinvSM;
-                    Omega(stateSize*jj-1:stateSize*jj-1) = Omega(stateSize*jj-1:stateSize*jj-1) + QinvSM;
+                    % diags
+                    Omega(stateSize*ii-1,stateSize*ii-1) = Omega(stateSize*ii-1:stateSize*ii-1) + QinvSM;
+                    Omega(stateSize*jj-1,stateSize*jj-1) = Omega(stateSize*jj-1:stateSize*jj-1) + QinvSM;
+                    % offdiags
+                    Omega(stateSize*ii-1,stateSize*jj-1) = Omega(stateSize*ii-1:stateSize*ii-1) - QinvSM;
+                    Omega(stateSize*jj-1,stateSize*ii-1) = Omega(stateSize*jj-1:stateSize*jj-1) - QinvSM;
+                    % zeta
                     zeta(stateSize*jj-1) = zeta(stateSize*jj-1) + QinvSM*(relHeading.deltaHeading(ii,jj)+2*pi);
                     zeta(stateSize*ii-1) = zeta(stateSize*ii-1) - QinvSM*(relHeading.deltaHeading(ii,jj)+2*pi)  ;
                     
                 else
-                    Omega(stateSize*ii-1:stateSize*ii-1) = Omega(stateSize*ii-1:stateSize*ii-1) + QinvSM;
-                    Omega(stateSize*jj-1:stateSize*jj-1) = Omega(stateSize*jj-1:stateSize*jj-1) + QinvSM;
+                    % diags
+                    Omega(stateSize*ii-1,stateSize*ii-1) = Omega(stateSize*ii-1:stateSize*ii-1) + QinvSM;
+                    Omega(stateSize*jj-1,stateSize*jj-1) = Omega(stateSize*jj-1:stateSize*jj-1) + QinvSM;
+                    % offdiags
+                    Omega(stateSize*ii-1,stateSize*jj-1) = Omega(stateSize*ii-1:stateSize*ii-1) - QinvSM;
+                    Omega(stateSize*jj-1,stateSize*ii-1) = Omega(stateSize*jj-1:stateSize*jj-1) - QinvSM;
+                    % zeta
                     zeta(stateSize*jj-1) = zeta(stateSize*jj-1) + QinvSM*relHeading.deltaHeading(ii,jj);
                     zeta(stateSize*ii-1) = zeta(stateSize*ii-1) - QinvSM*relHeading.deltaHeading(ii,jj);
                 end
@@ -78,6 +89,7 @@ end
 
 %% Loop closure
 if (~isempty(LCobj))
+    fprintf('Loop closure')
     % translation
     z = LCobj.T_1_2(1:2);
     H = [eye(2), zeros(2,4),   -eye(2), zeros(2,4)];
@@ -167,7 +179,7 @@ for ii = 1:Nstates
             
             %Qinv = inv(RCov'*QrangeBeamframe*RCov);
 
-            Qinv = 1000*eye(3);
+            Qinv = 10*eye(3);
 
             xDiff = mapEstimate(1:2,j) - stateEstimate(1:2,ii);
             zHat = B_R_V'*[xDiff;0];
@@ -247,7 +259,7 @@ for ii = 1:Nstates
     
 %     %% omega:
     % initial idea: 2*sigma = .01, so sigma = .005. 1/.005^2 = 40000
-    penalty = 00; % 1/covariance of expected measurement
+    penalty = 100; % 1/covariance of expected measurement
     % Penalize large omega
     Homega = [0 0 0 0 0 1];
     zMeasOmega = stateEstimate(6,ii);

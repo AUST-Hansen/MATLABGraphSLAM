@@ -46,7 +46,7 @@ for ii = 1:Nstates
             pointCloud2 = pointCloudB;
             % Do ICP
             [R,T,ERR] = icp(pointCloud1,pointCloud2,20,'WorstRejection',.1,'twoDee',true);
-            ERR
+            ERR;
             pNew = R*pointCloud2 + repmat(T,1,size(pointCloud2,2));
             % Do KNN
             [idxKNN, dKNN]=knnsearch(pointCloud1',pNew');
@@ -61,7 +61,7 @@ for ii = 1:Nstates
                     %
                     if (isempty(   intersect(c_i_t_new(:,jj), c_i_t_new(pose1FeatureIndex(idxKNN(kk)),ii)))) % mutex constraint
                         c_i_t_new(pose2FeatureIndex(kk),jj) = c_i_t_new(pose1FeatureIndex(idxKNN(kk)),ii);
-                        fprintf('match between %d and %d\n',ii,jj)
+                        %fprintf('match between %d and %d\n',ii,jj)
                         goodmatch = true;
                     end
                 end
