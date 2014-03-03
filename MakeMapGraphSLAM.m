@@ -22,22 +22,22 @@ startIdx = 1; % for now, this must be 1
 skip = 1;     % for now, this must be 1 also
 rangeSkipReson = 3;
 rangeSkipImagenex = 1;
-poseSkip = 4;
+poseSkip = 5;
 endIdx = 750;
 stateSize = 6;
 % Imagenex matching parameters
 addpath ransac
 ignx_sparsity = 3;
-scanmatch_threshold = 20; % only look for matches within this many meters of pose difference
-scanmatch_RMStolerance = 2.;
-scanmatch_probThreshold = 1.; 
+scanmatch_threshold = 8; % only look for matches within this many meters of pose difference
+scanmatch_RMStolerance = 4.;
+scanmatch_probThreshold = .75; 
 % Use imagenex, multibeam and DVL ranges in observations?
 useDVLRanges = false;
 useMultibeamRanges = false;
 useImagenexData = true;
 % give loop closure a few iterations to do its thing
-lcAllowance = 1;
-MAX_ITER = 10;
+lcAllowance = 0;
+MAX_ITER = 1;
 %% Read in Data
 fprintf('Reading in Data...\n')
 addpath ..
@@ -63,8 +63,8 @@ fprintf('Cleaning and formatting data...\n')
 %% test submap construction
 Submaps = buildSubmaps(processDVL(dvl,dvlData(1:endIdx),true,false),euler_obs_t(:,1:endIdx),50,mbMeas, c_i_t_mb);
 
-LCobj = lookForLoopClosureReson(Submaps);
-
+%LCobj = lookForLoopClosureReson(Submaps);
+LCobj = []
 %--------------------------------------------------------------------------
 %% Form input vectors  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Extract angular velocity of vehicle in inertial as a control input
@@ -88,13 +88,14 @@ initialMapEstimate = GraphSLAM_initializeMap(initialStateEstimate,rangeMeasureme
 initialFullStateEstimate = [reshape(initialStateEstimate,[],1); reshape(initialMapEstimate,[],1)];
 %% Calculate inzformation form of full posterior
 fprintf('Linearizing...\n')
-[Omega,zeta] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,c_i_t,meas_ind,initialFullStateEstimate,false,false,[],LCobj);
+[Omega,zeta] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,c_i_t,meas_ind,initialFullStateEstimate,false,false,[],[]);%LCobj);
 %% initial testing stuff
 %stateHist = reshape(Omega(1:endIdx*6,1:endIdx*6)\zeta(1:endIdx*6),6,[]);
 figure(1);
 plot(timeSteps,euler_berg_t(3,:));
 title('iceberg heading')
-state = Omega\zeta;
+[OmegaReduced,zetaReduced] = GraphSLAM_reduce(timeSteps(startIdx:endIdx),stateSize,Omega,zeta,c_i_t);
+[state, Sigma] = GraphSLAM_solve(OmegaReduced,zetaReduced,Omega,zeta,c_i_t);
 stateHist = reshape(state(1:6*(endIdx-startIdx)),6,[]);
 mapEsts = reshape(state(6*endIdx+1:end),3,[]);
 figure(2)
@@ -155,7 +156,7 @@ mapEsts = reshape(mu(6*endIdx+1:end),3,[]);
 % Timeout counter for main loop
 %%
 itimeout = 0;
-DEBUGflag = false;
+DEBUGflag = true;
 c_i_t_last = c_i_t;
 figure(10);spy(Omega)
 
@@ -263,8 +264,8 @@ while (itimeout < MAX_ITER)
     end
    %keyboard
    c_i_t = c_i_t_last;
-   reinitializeMapEstimate = GraphSLAM_initializeMap(reshape(mu(1:stateSize*(endIdx-startIdx)),6,[]),rangeMeasurements,c_i_t);
-   mu = [mu(1:stateSize*(endIdx-startIdx));reshape(reinitializeMapEstimate,[],1)];
+   reinitializeMapEstimate = GraphSLAM_initializeMap(reshape(mu(1:stateSize*(endIdx-startIdx+1)),6,[]),rangeMeasurements,c_i_t);
+   mu = [mu(1:stateSize*(endIdx-startIdx+1));reshape(reinitializeMapEstimate,[],1)];
 end
 totalTime = toc(tstart)
 
@@ -334,6 +335,12 @@ hold on; axis equal
 scatter(trueIgnxCloud(1,:),trueIgnxCloud(2,:),ones(1,size(trueIgnxCloud,2)),'g')
 plot(-stateHist(2,:),stateHist(1,:),'k')
 scatter(-mapEsts(2,:),mapEsts(1,:),ones(1,size(mapEsts,2)),'k')
+if (~isempty(LCobj))
+    scatter(-stateHist(2,LCobj.idx1),stateHist(1,LCobj.idx1),'rx')
+    scatter(-stateHist(2,LCobj.idx2),stateHist(1,LCobj.idx2),'rx')
+end
+scatter(-stateHist(2,681),stateHist(1,681),'rx')
+stateHist(:,LCobj.idx2)-stateHist(:,LCobj.idx1)
 legend('initial estimate','after being pushed through information form','truth','after one iteration of correspondence')
 title('estimated path')
 

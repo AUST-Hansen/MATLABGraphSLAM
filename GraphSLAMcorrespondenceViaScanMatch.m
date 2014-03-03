@@ -10,6 +10,8 @@ mapFeatures = reshape(mu(stateSize*Nstates+1:end),3,[]);
 relHeading.validMatch = spalloc(Nstates,Nstates,6*Nstates);
 relHeading.deltaHeading = spalloc(Nstates,Nstates,6*Nstates);
 
+endLCidx = 20; % last index you'll allow loop closure scan matching.
+
 ignxEndIdx = floor(imagenex.numBeams/imagenexSkip);
 
 for ii = 1:Nstates
@@ -34,7 +36,7 @@ for ii = 1:Nstates
         % are they close-ish?
         % if they're close and EITHER not far apart in time, or we're
         % looking for loop closure with first few soundings
-        if ((norm(pos1-pos2) < posThreshold && abs(ii-jj)<30 ) || (ii<20 && norm(pos1-pos2) < posThreshold)  )
+        if ((norm(pos1-pos2) < posThreshold && abs(ii-jj)<15 ) || (ii < endLCidx && norm(pos1-pos2) < 5*posThreshold)  )
             if (sum(c_i_t(:,jj) ~= -17) == 0)
                 continue
             end
@@ -45,15 +47,17 @@ for ii = 1:Nstates
             pointCloudB = berg_R_veh2*pointCloud2 + repmat([pos2;0],1,size(pointCloud2,2));
             pointCloud2 = pointCloudB;
             % Do ICP
-            [R,T,ERR] = icp(pointCloud1,pointCloud2,20,'WorstRejection',.1,'twoDee',true);
-            ERR;
-            pNew = R*pointCloud2 + repmat(T,1,size(pointCloud2,2));
+            %[R,T,ERR] = icp(pointCloud1,pointCloud2,20,'WorstRejection',.1,'twoDee',true);
+            [R,T,ERR,idxKNN,dKNN] = robustScanMatch(pointCloud1,pointCloud2);
+            %ERR;
+            %pNew = R*pointCloud2 + repmat(T,1,size(pointCloud2,2));
             % Do KNN
-            [idxKNN, dKNN]=knnsearch(pointCloud1',pNew');
+            %[idxKNN, dKNN]=knnsearch(pointCloud1',pNew');
             
             ERR(end)
+            [ii jj]
             for kk = 1:length(idxKNN)
-                if (ERR(end) < RMStolerance && dKNN(kk) <= probThreshold)
+                if (~isempty(ERR) && dKNN(kk) <= probThreshold)
                     %fprintf('rms: %d\n',ERR(end));
                     % looks like we have a winner
                     % kk is the index in pointCloud2

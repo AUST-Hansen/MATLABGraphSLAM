@@ -3,6 +3,11 @@ function LCobjs = lookForLoopClosureReson(Submaps)
 DEBUG = true;
 ERRs = 100;
 LCobjs = [];
+for iRef = 1:length(Submaps)
+    scatter3(Submaps(iRef).cloud(1,:),Submaps(iRef).cloud(2,:),Submaps(iRef).cloud(3,:),'b');
+    axis equal
+    keyboard
+end
 
 for iRef = 1:length(Submaps)
         ERRs = 100;
@@ -11,7 +16,7 @@ for iRef = 1:length(Submaps)
         ERRs = [ERRs, ERR(end)];
         
     end
-    
+
     [y, i] = min(ERRs);
     
     if (DEBUG)
@@ -38,7 +43,7 @@ for iRef = 1:length(Submaps)
         LCobj.idx1 = Submaps(iRef).refIndex;
         LCobj.idx2 = Submaps(i).refIndex;
         LCobj.R_1_2 = R;
-        LCobj.T_1_2 = T;
+        LCobj.T_1_2 = T; % in reference frame 1's bases: (TR * p + TT)
         
         LCobjs = [LCobjs LCobj]
     end

@@ -3,7 +3,7 @@ function [Omega,zeta,c_i_t_new] = GraphSLAM_linearize(timeStamps,inputs,measTime
 Nstates = size(timeStamps,2);
 stateSize = 6;
 NmapObservations = size(rangeMeasurements,2);
-NmapFeatures = max(max(correspondences)); %NmapObservations;
+NmapFeatures = sum(unique(correspondences)>0); %max(max(correspondences)); %NmapObservations;
 stateEstimate = reshape(fullStateEstimate(1:stateSize*Nstates),stateSize,[]);
 mapEstimate = reshape(fullStateEstimate(stateSize*Nstates+1:end),3,[]);
 % state has position, velocity, and heading info, as well as berg omega
@@ -23,11 +23,12 @@ zeta(1:6) = [0 0 inputs(1,1) 0 0 0]';
 xhat = zeros(stateSize,1);
 G = zeros(stateSize);
 %processNoise = diag([1e-10,1e-10,1e-9,1e-9,1e-9,1e-8]);
-processNoise = 1e-4*eye(stateSize);
+processNoise = zeros(stateSize);
+processNoise(1:2,1:2) = 1e-15*eye(2);
 processNoise(3,3) = 1e-6;
 processNoise(4,4) = 1e-6;
-processNoise(5,5) = 1e-6;
-processNoise(end,end) = 1e-8;
+processNoise(5,5) = 1e-5;     % gyro noise
+processNoise(end,end) = 1e-6; % bias driver
 QinvSM =5;
 %% Motion model
 for ii = 1:Nstates-1
@@ -52,7 +53,7 @@ for ii = 1:Nstates-1
     Omega((ii-1)*stateSize+1:(ii+1)*stateSize,(ii-1)*stateSize+1:(ii+1)*stateSize) = ... %self
         Omega((ii-1)*stateSize+1:(ii+1)*stateSize,(ii-1)*stateSize+1:(ii+1)*stateSize)...
         + [-G'; eye(stateSize)]*(processNoise\[-G, eye(stateSize)]);
-    
+
     zeta((ii-1)*stateSize+1:(ii+1)*stateSize) = zeta((ii-1)*stateSize+1:(ii+1)*stateSize) +...
         [-G'; eye(stateSize)]*(processNoise\(xhat - G*stateEstimate(:,ii)));
     
@@ -91,11 +92,12 @@ end
 if (~isempty(LCobj))
     fprintf('Loop closure')
     % translation
-    z = LCobj.T_1_2(1:2);
+    R = Euler2RotMat(0,0,stateEstimate(5,LCobj.idx1));
+    z = R(1:2,1:2)*LCobj.T_1_2(1:2);
     H = [eye(2), zeros(2,4),   -eye(2), zeros(2,4)];
     muVec = [stateEstimate(:,LCobj.idx1); stateEstimate(:,LCobj.idx2)];
     zHat = H*muVec;
-    QinvX = 100*eye(2);
+    QinvX = 1e8*eye(2);
     CovAdd = H'*QinvX*H;
     zetaAdd = H'*QinvX*(z - zHat + H*muVec); % redundant, since this measurement is linear
     % Add it to the matrices
@@ -149,6 +151,8 @@ if (~isempty(LCobj))
 end
 
 %% Measurements
+
+fprintf('\nMeasurements...\n')
 FeatureIndices = unique(correspondences);
 FeatureIndices = FeatureIndices(2:end); % remove -17
 counter = 0;
@@ -159,10 +163,13 @@ counter = 0;
 %         ii = i_s(idummy);
 %         jj = j_s(idummy);
 for ii = 1:Nstates
+    %fprintf('Nstates: %d\n',Nstates)
+    
     B_R_V = Euler2RotMat(0,0,stateEstimate(5,ii)); 
     V_R_B = B_R_V';
     for jj = 1:sum(meas_ind(:,ii) ~= -17)
         j = correspondences(jj,ii);
+            %fprintf('ii: %d, jj: %d, j: %d\n',ii, jj,j)
         measIndex = meas_ind(jj,ii); 
         mapFeatureIterator = j;
         %if(correspondences(jj,ii) == j)
@@ -259,13 +266,15 @@ for ii = 1:Nstates
     
 %     %% omega:
     % initial idea: 2*sigma = .01, so sigma = .005. 1/.005^2 = 40000
-    penalty = 100; % 1/covariance of expected measurement
+    penalty = 1; % 1/covariance of expected measurement
     % Penalize large omega
     Homega = [0 0 0 0 0 1];
     zMeasOmega = stateEstimate(6,ii);
     zExpOmega = 0;
     Omega(ii*stateSize,ii*stateSize) = Omega(ii*stateSize,ii*stateSize) + penalty;
-    zeta(ii*stateSize-5:ii*stateSize) = zeta(ii*stateSize-5:ii*stateSize) + penalty*Homega'*(zMeasOmega - zExpOmega + Homega*stateEstimate(:,ii));
+    zeta(ii*stateSize-5:ii*stateSize) = zeta(ii*stateSize-5:ii*stateSize) + penalty*Homega'*(zMeasOmega);
+%    zeta(ii*stateSize-5:ii*stateSize) = zeta(ii*stateSize-5:ii*stateSize) + penalty*Homega'*(zMeasOmega - zExpOmega + Homega*stateEstimate(:,ii));
+
     %% dvl
     dvlMeas = dvlReadings(ii) ;
     Qdvl = 1e-6;
