@@ -7,7 +7,7 @@ kRand = 80;
 kMax = 100;
 minPoints = 3;
 minAddInliers = 20;
-inlierRadius = .6;
+inlierRadius = .5;
 planeFitParam = 0.3; % determined empirically
 
 smoothingFactor = 7;
@@ -30,6 +30,9 @@ if(~isempty(varargin))
                 inlierRadius = varargin{k+1};
             case{'PlaneFitParam'}
                 planeFitParam = varargin{k+1};
+            case{'Iterations'}
+                kMax = varargin{k+1};
+                kRand = .8*kMax;
             case{'DEBUG'}
                 DEBUG = true;
         end %switch

@@ -10,7 +10,7 @@ mapFeatures = reshape(mu(stateSize*Nstates+1:end),3,[]);
 relHeading.validMatch = spalloc(Nstates,Nstates,6*Nstates);
 relHeading.deltaHeading = spalloc(Nstates,Nstates,6*Nstates);
 
-endLCidx = 20; % last index you'll allow loop closure scan matching.
+endLCidx = 0; % last index you'll allow loop closure scan matching.
 
 ignxEndIdx = floor(imagenex.numBeams/imagenexSkip);
 
@@ -36,7 +36,7 @@ for ii = 1:Nstates
         % are they close-ish?
         % if they're close and EITHER not far apart in time, or we're
         % looking for loop closure with first few soundings
-        if ((norm(pos1-pos2) < posThreshold && abs(ii-jj)<15 ) || (ii < endLCidx && norm(pos1-pos2) < 5*posThreshold)  )
+        if ((norm(pos1-pos2) < posThreshold && abs(ii-jj)<15 ) || (ii < endLCidx && norm(pos1-pos2) < 3*posThreshold)  )
             if (sum(c_i_t(:,jj) ~= -17) == 0)
                 continue
             end
@@ -50,14 +50,15 @@ for ii = 1:Nstates
             %[R,T,ERR] = icp(pointCloud1,pointCloud2,20,'WorstRejection',.1,'twoDee',true);
             [R,T,ERR,idxKNN,dKNN] = robustScanMatch(pointCloud1,pointCloud2);
             %ERR;
-            %pNew = R*pointCloud2 + repmat(T,1,size(pointCloud2,2));
+            pNew = R*pointCloud2 + repmat(T,1,size(pointCloud2,2));
             % Do KNN
             %[idxKNN, dKNN]=knnsearch(pointCloud1',pNew');
             
             ERR(end)
+            
             [ii jj]
             for kk = 1:length(idxKNN)
-                if (~isempty(ERR) && dKNN(kk) <= probThreshold)
+                if (~isempty(ERR) && dKNN(kk) <= probThreshold && ERR(end) < RMStolerance)
                     %fprintf('rms: %d\n',ERR(end));
                     % looks like we have a winner
                     % kk is the index in pointCloud2
@@ -77,7 +78,7 @@ for ii = 1:Nstates
         end
         
         %%%%%% DEBUG stuff
-        if (false && rand()<.95  && goodmatch == true && jj-ii > 100 )
+        if (false && rand()< 1  && goodmatch == true  )
             figure(9)
             hold on; axis equal;
             for qq = 1:length(featuresSeenAtPose1)

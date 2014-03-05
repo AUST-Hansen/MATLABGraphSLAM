@@ -14,7 +14,9 @@ pause on
 %% Constant parameters
 % File to read
 %filename = 'RandomTrajectories/WallFollowingTraj2.mat';
-filename = 'RandomTrajectories/WideAngleWallFollowingTraj1.mat';
+trajname = 'WideAngleWallFollowingTraj1';
+location = 'RandomTrajectories';
+filename = [location '/' trajname '.mat'];
 % Number of points to use
 % startIdx and endIdx will be used for all data. skip will only be applied to
 % range data, to allow a sparser map of observed features.
@@ -22,22 +24,22 @@ startIdx = 1; % for now, this must be 1
 skip = 1;     % for now, this must be 1 also
 rangeSkipReson = 3;
 rangeSkipImagenex = 1;
-poseSkip = 5;
-endIdx = 750;
+poseSkip = 3;
+endIdx = 700;
 stateSize = 6;
 % Imagenex matching parameters
 addpath ransac
 ignx_sparsity = 3;
-scanmatch_threshold = 8; % only look for matches within this many meters of pose difference
-scanmatch_RMStolerance = 4.;
-scanmatch_probThreshold = .75; 
+scanmatch_threshold = 10; % only look for matches within this many meters of pose difference
+scanmatch_RMStolerance = 2.;
+scanmatch_probThreshold = 1.; 
 % Use imagenex, multibeam and DVL ranges in observations?
 useDVLRanges = false;
 useMultibeamRanges = false;
 useImagenexData = true;
 % give loop closure a few iterations to do its thing
-lcAllowance = 0;
-MAX_ITER = 1;
+lcAllowance = 1;
+MAX_ITER = 2;
 %% Read in Data
 fprintf('Reading in Data...\n')
 addpath ..
@@ -96,20 +98,31 @@ plot(timeSteps,euler_berg_t(3,:));
 title('iceberg heading')
 [OmegaReduced,zetaReduced] = GraphSLAM_reduce(timeSteps(startIdx:endIdx),stateSize,Omega,zeta,c_i_t);
 [state, Sigma] = GraphSLAM_solve(OmegaReduced,zetaReduced,Omega,zeta,c_i_t);
-stateHist = reshape(state(1:6*(endIdx-startIdx)),6,[]);
+%%
+stateHist = reshape(state(1:6*(endIdx-startIdx+1)),6,[]);
 mapEsts = reshape(state(6*endIdx+1:end),3,[]);
 figure(2)
 plot(-initialStateEstimate(2,:),initialStateEstimate(1,:))
 hold on
 axis equal
-plot(-stateHist(2,:),stateHist(1,:),'r')
+scatter(-stateHist(2,:),stateHist(1,:),'r')
 plot(xVehBergframe(1,:) - xVehBergframe(1,1)  ,xVehBergframe(2,:) - xVehBergframe(2,1),'g')
 scatter(trueIgnxCloud(1,:),trueIgnxCloud(2,:),ones(1,size(trueIgnxCloud,2)),'g')
 scatter(-initialMapEstimate(2,:),initialMapEstimate(1,:),ones(1,size(initialMapEstimate,2)),'b')
 scatter(-mapEsts(2,:),mapEsts(1,:),ones(1,size(mapEsts,2)),'r')
+arrows = zeros(2,endIdx);
+arrows2 = arrows;
+for ii = 1:length(arrows) 
+    R = Euler2RotMat(0,0,stateHist(5,ii));
+    arrows(:,ii) = R(1:2,1:2)*[stateHist(3,ii);stateHist(4,ii)];
+    arrows2(:,ii) = R(1:2,1:2)*[1;0];
+end
+quiver(-stateHist(2,:),stateHist(1,:),-arrows(2,:),arrows(1,:));
+quiver(-stateHist(2,:),stateHist(1,:),-arrows2(2,:),arrows2(1,:),'r');
 %legend('initial estimate','after being pushed through information form','truth')
 title('estimated path')
 drawnow;
+
 %% visualizing icp stuff
 % first two scans
 % figure;
@@ -153,6 +166,9 @@ scatter(-mapEsts(2,:),mapEsts(1,:),ones(1,size(mapEsts,2)),'k')
 stateHist = reshape(mu(1:6*endIdx),6,[]);
 mapEsts = reshape(mu(6*endIdx+1:end),3,[]);
 
+%% try to identify loop closure
+c_i_t = lookForLoopClosure(c_i_t,rangeMeasurements,measurementTimestamps,scanmatch_probThreshold);
+
 % Timeout counter for main loop
 %%
 itimeout = 0;
@@ -171,11 +187,16 @@ while (itimeout < MAX_ITER)
     mu_last = mu;
     if itimeout>=lcAllowance
         %c_i_t = meas_ind; % TODO: only reset once
-        [c_i_t, relHeading] = GraphSLAMcorrespondenceViaScanMatch(mu,c_i_t,scanmatch_threshold,scanmatch_probThreshold,scanmatch_RMStolerance,meas_ind,rangeMeasurements,imagenex,rangeSkipImagenex);
-        useRelHeading = false;
-        
+        if (~exist(strcat(trajname,'_correspondences.mat'),'file'))
+            [c_i_t, relHeading] = GraphSLAMcorrespondenceViaScanMatch(mu,c_i_t,scanmatch_threshold,scanmatch_probThreshold,scanmatch_RMStolerance,meas_ind,rangeMeasurements,imagenex,rangeSkipImagenex);
+            useRelHeading = false;
+            save(strcat(trajname,'_correspondences.mat'),'c_i_t','relHeading')
+        else
+            %load(strcat(trajname,'_correspondences.mat'))
+            useRelHeading = false;
+        end
     end
-        % linearize
+%%        % linearize
     fprintf('Linearizing...\n')
     clear Omega
     clear Sigma
@@ -230,6 +251,7 @@ while (itimeout < MAX_ITER)
          hold on;
          plot(euler_obs_t(3,1:endIdx) - euler_berg_t(3,1:endIdx) - pi/2)
    end
+   %%
    if(true)
         colorz = 'rbkcy';
         stateHist = reshape(mu(1:6*(endIdx-startIdx)),6,[]);
@@ -241,7 +263,7 @@ while (itimeout < MAX_ITER)
         figure(20); hold on; scatter(itimeout,norm(mu(1:stateSize*(endIdx-startIdx)) - lastMu))
         lastMu = mu(1:stateSize*(endIdx-startIdx));
        drawnow()
-       
+       %%
    end
    %%
    figure(7); spy(c_i_t-c_i_t_last);
@@ -298,13 +320,14 @@ totalTime = toc(tstart)
 %                 drawnow()
 %               end
           end
-%%
+
+          %%
          figure(4); plot(stateHist(3:end,:)')
          hold on;
          plot(euler_obs_t(3,1:endIdx) - euler_berg_t(3,1:endIdx) - pi/2,'g')
          [vels,lock] = processDVL(dvl,dvlData(1:endIdx),true,false);
-         plot(vels(1,:),'k')
-         plot(vels(2,:),'k')
+         %plot(vels(1,:),'k')
+         %plot(vels(2,:),'k')
          plot(lock,'r')
          legend('v_x est','v_y est','heading est','\omega_{berg} est','true heading','DVL_x','DVL_y','DVL lock')
          title('Motion estimates vs. truth')
@@ -339,30 +362,37 @@ if (~isempty(LCobj))
     scatter(-stateHist(2,LCobj.idx1),stateHist(1,LCobj.idx1),'rx')
     scatter(-stateHist(2,LCobj.idx2),stateHist(1,LCobj.idx2),'rx')
 end
-scatter(-stateHist(2,681),stateHist(1,681),'rx')
-stateHist(:,LCobj.idx2)-stateHist(:,LCobj.idx1)
+for ii = 1:length(arrows)
+    R = Euler2RotMat(0,0,stateHist(5,ii));
+    arrows(:,ii) = R(1:2,1:2)*[stateHist(3,ii);stateHist(4,ii)];
+    arrows2(:,ii) = R(1:2,1:2)*[1;0];
+end
+quiver(-stateHist(2,:),stateHist(1,:),-arrows(2,:),arrows(1,:));
+quiver(-stateHist(2,:),stateHist(1,:),-arrows2(2,:),arrows2(1,:),'r');
+
 legend('initial estimate','after being pushed through information form','truth','after one iteration of correspondence')
 title('estimated path')
 
 %%
 
-[R,T,ERR] = icp(trueIgnxCloud(:,1:10:end),[-mapEsts(2,:);mapEsts(1,:);mapEsts(3,:)],'WorstRejection',.1);
-rotatedMap = R*mapEsts + repmat(T,1,size(mapEsts,2));
-rotatedTrack = R(1:2,1:2)*stateHist(1:2,:) + repmat(T(1:2),1,size(stateHist,2));
-%%
-figure(15); 
-
-%trueIgnxCloudBeg = trueIgnxCloud(:,meas_ind(meas_ind(:,1)~=-17));
-
-%trueIgnxCloudEnd = trueIgnxCloud(:,meas_ind(meas_ind(:,741)~=-17));
-
-plot(xVehBergframe(1,:) - xVehBergframe(1,1)  ,xVehBergframe(2,:) - xVehBergframe(2,1),'g')
-hold on; axis equal
-scatter(trueIgnxCloud(1,:),trueIgnxCloud(2,:),ones(1,size(trueIgnxCloud,2)),'g')
-%scatter(trueIgnxCloudBeg(1,:),trueIgnxCloudBeg(2,:),'ro')
-%scatter(trueIgnxCloudEnd(1,:),trueIgnxCloudEnd(2,:),'b+')
-
-plot(-rotatedTrack(2,:),rotatedTrack(1,:),'k')
-scatter(-rotatedMap(2,:),rotatedMap(1,:),ones(1,size(rotatedMap,2)),'k')
-legend('initial estimate','after being pushed through information form','truth','after one iteration of correspondence')
-title('estimated path')
+%[R,T,ERR] = icp(trueIgnxCloud(:,1:10:end),[-mapEsts(2,:);mapEsts(1,:);mapEsts(3,:)],'WorstRejection',.1);
+% [R,T,ERR] = robustScanMatch(trueIgnxCloud(:,1:10:end),[-mapEsts(2,:);mapEsts(1,:);mapEsts(3,:)]);
+% rotatedMap = R*mapEsts + repmat(T,1,size(mapEsts,2));
+% rotatedTrack = R(1:2,1:2)*stateHist(1:2,:) + repmat(T(1:2),1,size(stateHist,2));
+% %%
+% figure(15); 
+% 
+% %trueIgnxCloudBeg = trueIgnxCloud(:,meas_ind(meas_ind(:,1)~=-17));
+% 
+% %trueIgnxCloudEnd = trueIgnxCloud(:,meas_ind(meas_ind(:,741)~=-17));
+% 
+% plot(xVehBergframe(1,:) - xVehBergframe(1,1)  ,xVehBergframe(2,:) - xVehBergframe(2,1),'g')
+% hold on; axis equal
+% scatter(trueIgnxCloud(1,:),trueIgnxCloud(2,:),ones(1,size(trueIgnxCloud,2)),'g')
+% %scatter(trueIgnxCloudBeg(1,:),trueIgnxCloudBeg(2,:),'ro')
+% %scatter(trueIgnxCloudEnd(1,:),trueIgnxCloudEnd(2,:),'b+')
+% 
+% plot(-rotatedTrack(2,:),rotatedTrack(1,:),'k')
+% scatter(-rotatedMap(2,:),rotatedMap(1,:),ones(1,size(rotatedMap,2)),'k')
+% legend('initial estimate','after being pushed through information form','truth','after one iteration of correspondence')
+% title('estimated path')

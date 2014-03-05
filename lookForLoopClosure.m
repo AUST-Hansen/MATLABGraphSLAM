@@ -34,7 +34,7 @@ pose2FeatureIndex = find (c_i_t(:,ii)~=-17);
 featuresSeenAtPose2 = c_i_t(pose2FeatureIndex,ii);
 pointCloud2 = rangeMeasurements(:,featuresSeenAtPose2);
 % do icp
-[R,T,ERR,idxKNN,dKNN] = robustScanMatch(pointCloud1,pointCloud2);
+[R,T,ERR,idxKNN,dKNN] = robustScanMatch(pointCloud1,pointCloud2,'MaxIterations',200);
 pNew = R*pointCloud2 + repmat(T,1,size(pointCloud2,2));
 % Do KNN
 goodmatch = false;

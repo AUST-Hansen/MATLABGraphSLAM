@@ -13,10 +13,10 @@ Omega = spalloc((stateSize*Nstates+3*NmapFeatures),(stateSize*Nstates+3*NmapFeat
 % anchor initial position and orientation
 Omega(1,1) = 1e13;
 Omega(2,2) = 1e13;
-Omega(3,3) = 1;
-Omega(4,4) = 1;
+Omega(3,3) = 0;
+Omega(4,4) = 0;
 Omega(5,5) = 1e13;
-Omega(6,6) = 1e4; % TODO: reduce this
+Omega(6,6) = 1; % TODO: reduce this
 % ininitialize zeta
 zeta = zeros(stateSize*Nstates + 3*NmapFeatures,1);
 zeta(1:6) = [0 0 inputs(1,1) 0 0 0]';
@@ -24,11 +24,11 @@ xhat = zeros(stateSize,1);
 G = zeros(stateSize);
 %processNoise = diag([1e-10,1e-10,1e-9,1e-9,1e-9,1e-8]);
 processNoise = zeros(stateSize);
-processNoise(1:2,1:2) = 1e-15*eye(2);
-processNoise(3,3) = 1e-6;
-processNoise(4,4) = 1e-6;
+processNoise(1:2,1:2) = 1e-12*eye(2);
+processNoise(3,3) = 1e-4;
+processNoise(4,4) = 1e-4;
 processNoise(5,5) = 1e-5;     % gyro noise
-processNoise(end,end) = 1e-6; % bias driver
+processNoise(end,end) = 1e-8; % bias driver
 QinvSM =5;
 %% Motion model
 for ii = 1:Nstates-1
@@ -43,10 +43,16 @@ for ii = 1:Nstates-1
     
     [~, xHat] = ode45(@dStateDt,[0 dT],[stateEstimate(:,ii);inputs(:,ii)]);
     xhat = xHat(end,1:6)';
-    
+    % current state estimate
+    u = stateEstimate(3,ii);
+    v = stateEstimate(4,ii);
+    bias = stateEstimate(6,ii);
+    cPsi = cos(heading);
+    sPsi= sin(heading);
     G(1:2,1:2) = eye(2);
     G(1:2,3:4) = berg_R_veh*dT;
-    G(3:4,3:4) = eye(2)*(1-dT);
+    G(1:2,5) = dT*([-sPsi, -cPsi; cPsi, -sPsi]*[u; v]);
+    G(3:4,3:4) = eye(2);
     G(5:6,5:6) = eye(2);
     G(5,6) = -dT;
     % add information to Omega and zeta
@@ -176,44 +182,25 @@ for ii = 1:Nstates
             %expectedMeasurement = B_R_V'*(mapEstimate(:,j) - [stateEstimate(1:2,ii); 0] + [0 0 eps]') ;
             %expectedMeasurement = B_R_V'*(-[stateEstimate(1:2,ii); 0] + [0 0 eps]') ;
             % build covariance
-            sigmaParallel = sensor.beamSigmaPercentageOfRange*norm(rangeMeasurements(:,measIndex));
-            QrangeBeamframe = diag([sigmaParallel^2, 1/10*sigmaParallel^2 , 1/10*sigmaParallel^2]);
-            vec1 = rangeMeasurements(:,measIndex)/norm(rangeMeasurements(:,measIndex));
-            vec2 = [-(vec1(2)+vec1(3))/(vec1(1)+eps); 1; 1];
-            vec2 = vec2/norm(vec2);
-            vec3 = cross(vec1,vec2);
-            RCov = [vec1 vec2 vec3]';
-            
-            %Qinv = inv(RCov'*QrangeBeamframe*RCov);
+            Qinv = 100*eye(3);
 
-            Qinv = 10*eye(3);
-
-            xDiff = mapEstimate(1:2,j) - stateEstimate(1:2,ii);
-            zHat = B_R_V'*[xDiff;0];
+            xDiff = mapEstimate(1:3,j) - [stateEstimate(1:2,ii); 0];
+            zHat = V_R_B*[xDiff];
             zMeas = rangeMeasurements(:,measIndex);
-            %xDiff =  -stateEstimate(1:2,ii);
-            %[[jj;ii;j] zHat zMeas zDiff]
             cTheta = B_R_V(1,1);
-            sTheta = B_R_V(2,1);
+            sTheta = -B_R_V(2,1);
             %[zHat zMeas zDiff]
             
-%             H = [-cTheta, -sTheta, 0, 0, -xDiff(1)*sTheta+xDiff(2)*cTheta, 0, cTheta, sTheta, 0;...
-%                 sTheta, -cTheta, 0, 0, -xDiff(1)*cTheta-xDiff(2)*sTheta, 0, -sTheta, cTheta, 0;...
-%                 0,0,0,0,0,0,0,0,1];
-            H = [[-V_R_B(1:2,1:2), zeros(2), [-sTheta cTheta; -cTheta -sTheta]*xDiff , [0;0],  V_R_B(1:2,1:3)];...
-                     [0, 0,           0,0                   ,0                         ,0       ,0,0,  1]];
-            %H = [cTheta, sTheta, 0, 0, xDiff(1)*sTheta-xDiff(2)*cTheta, 0, -cTheta, -sTheta, 0;...
-            %    -sTheta, cTheta, 0, 0, xDiff(1)*cTheta+xDiff(2)*sTheta, 0, sTheta, -cTheta, 0;...
-            %    0,0,0,0,0,0,0,0,1];
-            %H = [-cTheta, -sTheta, 0, 0, 0, 0, cTheta, sTheta, 0;...
-            %      sTheta, -cTheta, 0, 0, 0, 0, -sTheta, cTheta, 0;...
-            %      0,0,0,0,0,0,0,0,1];
-            %           Hx = 1/q*[-sqrtQ*delta(1) -sqrtQ*delta(2) 0 0 0 0;...
-            %                    delta(2) -delta(1) 0 0 -q 0 ;...
-            %                    0 0 0 0 0 0];
-            %           Hm = 1/q*[sqrtQ*delta(1) sqrtQ*delta(2) sqrtQ*delta(3);...
-            %                    -delta(2) delta(1)  0; ...
-            %                    0 0 1/sqrt(1-(delta(3)/sqrtQ)^2)*(2*delta(3)) ];
+            %             H = [-cTheta, -sTheta, 0, 0, -xDiff(1)*sTheta+xDiff(2)*cTheta, 0, cTheta, sTheta, 0;...
+            %                 sTheta, -cTheta, 0, 0, -xDiff(1)*cTheta-xDiff(2)*sTheta, 0, -sTheta, cTheta, 0;...
+            %                 0,0,0,0,0,0,0,0,1];
+            H = [[-V_R_B(1:2,1:2), zeros(2), [-sTheta cTheta; -cTheta -sTheta]*xDiff(1:2) , [0;0],  V_R_B(1:2,1:3)];...
+                [0, 0,           0,0                   ,0                         ,0       ,0,0,  1]];
+            %            H = [[-V_R_B(1:2,1:2), zeros(2,4),  V_R_B(1:2,1:3)];...
+            %                     [0, 0,           0,0                   ,0                         ,0       ,0,0,  1]];
+            %             H = [[-eye(2), zeros(2,4),  eye(2), [0;0] ];...
+            %                     [0, 0,           0,0                   ,0                         ,0       ,0,0,  1]];
+            
             CovAdd = H'*Qinv*H;
             %CovAdd(end,end) = .01;
             %zetaAdd = H'*Qinv*(H*[stateEstimate(:,ii) ; mapEstimate(:,j)]);
@@ -266,7 +253,7 @@ for ii = 1:Nstates
     
 %     %% omega:
     % initial idea: 2*sigma = .01, so sigma = .005. 1/.005^2 = 40000
-    penalty = 1; % 1/covariance of expected measurement
+    penalty = 100; % 1/covariance of expected measurement
     % Penalize large omega
     Homega = [0 0 0 0 0 1];
     zMeasOmega = stateEstimate(6,ii);
@@ -296,6 +283,7 @@ for ii = 1:Nstates
     
     
 end
+
 
 % if(haveInitialized)
 %     for jjj = 1:length(remainingFeatures)
