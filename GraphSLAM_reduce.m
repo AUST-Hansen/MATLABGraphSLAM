@@ -6,9 +6,11 @@ function [OmegaTilde,zetaTilde] = GraphSLAM_reduce(timeStamps,stateSize,Omega,ze
    OmegaTilde = Omega(1:lastStateIdx,1:lastStateIdx);
    zetaTilde = zeta(1:lastStateIdx);
 
-
+fprintf('Reducing...\n');
    for jj = 1:nMapFeatures
-       jj
+       if(mod(jj,1000)==0)
+           fprintf('%d of %d features processed\n',jj,nMapFeatures);
+       end
        % identify poses which have seen map features
        [aa,bb]=find(c_i_t == jj);
        if (~isempty(bb)) % If we've seen this feature

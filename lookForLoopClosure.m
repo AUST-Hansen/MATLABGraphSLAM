@@ -1,7 +1,7 @@
 function c_i_t_new = lookForLoopClosure(c_i_t,rangeMeasurements,measurementTimestamps,probThreshold)
 
 jj=1;
-offset = 650;
+offset = 680;
 c_i_t_new = c_i_t;
 pose1FeatureIndex = find (c_i_t(:,jj)~=-17);
 featuresSeenAtPose1 = c_i_t(pose1FeatureIndex,jj);
