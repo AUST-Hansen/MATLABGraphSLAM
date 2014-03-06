@@ -27,7 +27,7 @@ processNoise = zeros(stateSize);
 processNoise(1:2,1:2) = 1e-12*eye(2);
 processNoise(3,3) = 1e-4;
 processNoise(4,4) = 1e-4;
-processNoise(5,5) = 1e-5;     % gyro noise
+processNoise(5,5) = 1e-8;     % gyro noise
 processNoise(end,end) = 1e-8; % bias driver
 QinvSM =5;
 %% Motion model
@@ -188,7 +188,7 @@ for ii = 1:Nstates
             zHat = V_R_B*[xDiff];
             zMeas = rangeMeasurements(:,measIndex);
             cTheta = B_R_V(1,1);
-            sTheta = -B_R_V(2,1);
+            sTheta = B_R_V(2,1);
             %[zHat zMeas zDiff]
             
             %             H = [-cTheta, -sTheta, 0, 0, -xDiff(1)*sTheta+xDiff(2)*cTheta, 0, cTheta, sTheta, 0;...

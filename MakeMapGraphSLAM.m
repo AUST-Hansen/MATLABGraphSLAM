@@ -39,7 +39,7 @@ useMultibeamRanges = false;
 useImagenexData = true;
 % give loop closure a few iterations to do its thing
 lcAllowance = 1;
-MAX_ITER = 2;
+MAX_ITER = 3;
 %% Read in Data
 fprintf('Reading in Data...\n')
 addpath ..
@@ -286,8 +286,8 @@ while (itimeout < MAX_ITER)
     end
    %keyboard
    c_i_t = c_i_t_last;
-   reinitializeMapEstimate = GraphSLAM_initializeMap(reshape(mu(1:stateSize*(endIdx-startIdx+1)),6,[]),rangeMeasurements,c_i_t);
-   mu = [mu(1:stateSize*(endIdx-startIdx+1));reshape(reinitializeMapEstimate,[],1)];
+   %reinitializeMapEstimate = GraphSLAM_initializeMap(reshape(mu(1:stateSize*(endIdx-startIdx+1)),6,[]),rangeMeasurements,c_i_t);
+   %mu = [mu(1:stateSize*(endIdx-startIdx+1));reshape(reinitializeMapEstimate,[],1)];
 end
 totalTime = toc(tstart)
 

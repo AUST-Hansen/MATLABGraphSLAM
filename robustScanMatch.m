@@ -30,7 +30,7 @@ if(~isempty(varargin))
                 inlierRadius = varargin{k+1};
             case{'PlaneFitParam'}
                 planeFitParam = varargin{k+1};
-            case{'Iterations'}
+            case{'MaxIterations'}
                 kMax = varargin{k+1};
                 kRand = .8*kMax;
             case{'DEBUG'}
