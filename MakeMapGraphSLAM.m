@@ -31,14 +31,17 @@ stateSize = 6;
 addpath ransac
 ignx_sparsity = 3;
 scanmatch_threshold = 10; % only look for matches within this many meters of pose difference
-scanmatch_RMStolerance = 2.;
+scanmatch_RMStolerance = 1.;
 scanmatch_probThreshold = 1.; 
 % Use imagenex, multibeam and DVL ranges in observations?
 useDVLRanges = false;
 useMultibeamRanges = false;
 useImagenexData = true;
+% Scanmatch weights
+LCWeight = 10;
+InlineWeight = .001;
 % give loop closure a few iterations to do its thing
-lcAllowance = 1;
+lcAllowance = 2;
 MAX_ITER = 3;
 %% Read in Data
 fprintf('Reading in Data...\n')
@@ -58,12 +61,12 @@ fprintf('Reson...\n')
 % integrate high rate pose data but not deal with as many map features if
 % we don't want to.
 fprintf('Cleaning and formatting data...\n')
-[measurementTimestamps, rangeMeasurements, c_i_t, meas_ind,mbMeas,c_i_t_mb] = cleanMeasurements(timeSteps(1:skip:endIdx),sensor,rangeData(:,startIdx:skip:endIdx),useMultibeamRanges,imagenex,imagenexData(:,startIdx:skip:endIdx),useImagenexData,dvl,dvlData(startIdx:skip:endIdx),useDVLRanges,rangeSkipReson,rangeSkipImagenex,poseSkip);
+[measurementTimestamps, rangeMeasurements, correspondences, meas_ind,mbMeas,correspondences_mb] = cleanMeasurements(timeSteps(1:skip:endIdx),sensor,rangeData(:,startIdx:skip:endIdx),useMultibeamRanges,imagenex,imagenexData(:,startIdx:skip:endIdx),useImagenexData,dvl,dvlData(startIdx:skip:endIdx),useDVLRanges,rangeSkipReson,rangeSkipImagenex,poseSkip);
 %% try to identify loop closure
-%c_i_t = lookForLoopClosure(c_i_t,rangeMeasurements,measurementTimestamps,scanmatch_probThreshold);
+%correspondences.c_i_t = lookForLoopClosure(correspondences.c_i_t,rangeMeasurements,measurementTimestamps,scanmatch_probThreshold);
 %--------------------------------------------------------------------------
 %% test submap construction
-Submaps = buildSubmaps(processDVL(dvl,dvlData(1:endIdx),true,false),euler_obs_t(:,1:endIdx),50,mbMeas, c_i_t_mb);
+Submaps = buildSubmaps(processDVL(dvl,dvlData(1:endIdx),true,false),euler_obs_t(:,1:endIdx),50,mbMeas, correspondences_mb);
 
 %LCobj = lookForLoopClosureReson(Submaps);
 LCobj = []
@@ -86,18 +89,18 @@ initialPsiDotGuess = .0;%035;
 initialStateEstimate = GraphSLAM_initialize(timeSteps(startIdx:endIdx),inputs,initialPsiDotGuess);
 %initialStateEstimate = GraphSLAM_initializeWithTruth(timeSteps(startIdx:endIdx),euler_obs_t,euler_berg_t,x_obs_t_true,x_berg_cm_t)
 fprintf('Initializing Map Features...\n')
-initialMapEstimate = GraphSLAM_initializeMap(initialStateEstimate,rangeMeasurements,c_i_t);
+initialMapEstimate = GraphSLAM_initializeMap(initialStateEstimate,rangeMeasurements,correspondences);
 initialFullStateEstimate = [reshape(initialStateEstimate,[],1); reshape(initialMapEstimate,[],1)];
 %% Calculate inzformation form of full posterior
 fprintf('Linearizing...\n')
-[Omega,zeta] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,c_i_t,meas_ind,initialFullStateEstimate,false,false,[],[]);%LCobj);
+[Omega,zeta] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,correspondences,meas_ind,initialFullStateEstimate,false,false,[],[]);%LCobj);
 %% initial testing stuff
 %stateHist = reshape(Omega(1:endIdx*6,1:endIdx*6)\zeta(1:endIdx*6),6,[]);
 figure(1);
 plot(timeSteps,euler_berg_t(3,:));
 title('iceberg heading')
-[OmegaReduced,zetaReduced] = GraphSLAM_reduce(timeSteps(startIdx:endIdx),stateSize,Omega,zeta,c_i_t);
-[state, Sigma] = GraphSLAM_solve(OmegaReduced,zetaReduced,Omega,zeta,c_i_t);
+[OmegaReduced,zetaReduced] = GraphSLAM_reduce(timeSteps(startIdx:endIdx),stateSize,Omega,zeta,correspondences);
+[state, Sigma] = GraphSLAM_solve(OmegaReduced,zetaReduced,Omega,zeta);
 %%
 stateHist = reshape(state(1:6*(endIdx-startIdx+1)),6,[]);
 mapEsts = reshape(state(6*endIdx+1:end),3,[]);
@@ -126,18 +129,18 @@ drawnow;
 %% visualizing icp stuff
 % first two scans
 % figure;
-% scatter(initialMapEstimate(1,c_i_t(c_i_t(:,1)~=-17,1)),initialMapEstimate(2,c_i_t(c_i_t(:,1)~=-17,1)),'r')
+% scatter(initialMapEstimate(1,correspondences.c_i_t(correspondences.c_i_t(:,1)~=-17,1)),initialMapEstimate(2,correspondences.c_i_t(correspondences.c_i_t(:,1)~=-17,1)),'r')
 % hold on; axis equal;
-% scatter(initialMapEstimate(1,c_i_t(c_i_t(:,20)~=-17,20)),initialMapEstimate(2,c_i_t(c_i_t(:,20)~=-17,20)),'b')
+% scatter(initialMapEstimate(1,correspondences.c_i_t(correspondences.c_i_t(:,20)~=-17,20)),initialMapEstimate(2,correspondences.c_i_t(correspondences.c_i_t(:,20)~=-17,20)),'b')
 % title('scans 1 and 20')
 % figure;
-% scatter(initialMapEstimate(1,c_i_t(c_i_t(:,end-20)~=-17,end-20)),initialMapEstimate(2,c_i_t(c_i_t(:,end-20)~=-17,end-20)),'r')
+% scatter(initialMapEstimate(1,correspondences.c_i_t(correspondences.c_i_t(:,end-20)~=-17,end-20)),initialMapEstimate(2,correspondences.c_i_t(correspondences.c_i_t(:,end-20)~=-17,end-20)),'r')
 % hold on; axis equal;
-% scatter(initialMapEstimate(1,c_i_t(c_i_t(:,end)~=-17,end)),initialMapEstimate(2,c_i_t(c_i_t(:,end)~=-17,end)),'b')
+% scatter(initialMapEstimate(1,correspondences.c_i_t(correspondences.c_i_t(:,end)~=-17,end)),initialMapEstimate(2,correspondences.c_i_t(correspondences.c_i_t(:,end)~=-17,end)),'b')
 % title('scans end-20 and end')
 %%
-% qICP = initialMapEstimate(:,c_i_t(c_i_t(:,end-20)~=-17,end-20));
-% pICP = initialMapEstimate(:,c_i_t(c_i_t(:,end)~=-17,end));
+% qICP = initialMapEstimate(:,correspondences.c_i_t(correspondences.c_i_t(:,end-20)~=-17,end-20));
+% pICP = initialMapEstimate(:,correspondences.c_i_t(correspondences.c_i_t(:,end)~=-17,end));
 % [R,T,ERR] = icp(qICP,pICP,'twoDee',false);
 % figure;
 % pNew = R*pICP + repmat(T,1,size(pICP,2));
@@ -145,8 +148,7 @@ drawnow;
 % hold on; axis equal;
 % scatter(pNew(1,:),pNew(2,:),'b')
 %% Reduce graph by marginalizing 
-fprintf('Reducing...\n')
-[OmegaReduced,zetaReduced] = GraphSLAM_reduce(timeSteps(startIdx:endIdx),stateSize,Omega,zeta,c_i_t);
+[OmegaReduced,zetaReduced] = GraphSLAM_reduce(timeSteps(startIdx:endIdx),stateSize,Omega,zeta,correspondences);
 % state2 = OmegaReduced\zetaReduced;
 % stateHist2 = reshape(state2,6,[]);
 % figure(1)
@@ -156,7 +158,7 @@ fprintf('Reducing...\n')
 % title('reduced solution')
 %% Initial solve
 fprintf('Solving...\n')
-[mu, Sigma] = GraphSLAM_solve(OmegaReduced,zetaReduced,Omega,zeta,c_i_t);
+[mu, Sigma] = GraphSLAM_solve(OmegaReduced,zetaReduced,Omega,zeta);
 
 figure(12)
 plot(xVehBergframe(1,:) - xVehBergframe(1,1)  ,xVehBergframe(2,:) - xVehBergframe(2,1),'g')
@@ -167,13 +169,13 @@ stateHist = reshape(mu(1:6*endIdx),6,[]);
 mapEsts = reshape(mu(6*endIdx+1:end),3,[]);
 
 %% try to identify loop closure
-c_i_t = lookForLoopClosure(c_i_t,rangeMeasurements,measurementTimestamps,scanmatch_probThreshold);
+correspondences = lookForLoopClosure(correspondences,rangeMeasurements,measurementTimestamps,scanmatch_probThreshold,LCWeight,'MinIndex',680,'MaxIndex',684);
 
 % Timeout counter for main loop
 %%
 itimeout = 0;
 DEBUGflag = true;
-c_i_t_last = c_i_t;
+correspondences.c_i_t_last = correspondences.c_i_t;
 figure(10);spy(Omega)
 
 lastMu = mu(1:stateSize*(endIdx-startIdx));
@@ -183,16 +185,17 @@ relHeading = [];
 while (itimeout < MAX_ITER) 
     
     % Test correspondences for imagenex scan matching.
-    c_i_t_last = c_i_t;
+    correspondences_last = correspondences;
     mu_last = mu;
     if itimeout>=lcAllowance
-        %c_i_t = meas_ind; % TODO: only reset once
+        %correspondences.c_i_t = meas_ind; % TODO: only reset once
         if (~exist(strcat(trajname,'_correspondences.mat'),'file'))
-            [c_i_t, relHeading] = GraphSLAMcorrespondenceViaScanMatch(mu,c_i_t,scanmatch_threshold,scanmatch_probThreshold,scanmatch_RMStolerance,meas_ind,rangeMeasurements,imagenex,rangeSkipImagenex);
+            [correspondences, relHeading] = GraphSLAMcorrespondenceViaScanMatch(mu,correspondences,scanmatch_threshold,scanmatch_probThreshold,...
+                scanmatch_RMStolerance,meas_ind,rangeMeasurements,imagenex,rangeSkipImagenex,10,.1);
             useRelHeading = false;
-            save(strcat(trajname,'_correspondences.mat'),'c_i_t','relHeading')
+            save(strcat(trajname,'_correspondences.mat'),'correspondences','relHeading')
         else
-            %load(strcat(trajname,'_correspondences.mat'))
+            load(strcat(trajname,'_correspondences.mat'))
             useRelHeading = false;
         end
     end
@@ -200,15 +203,15 @@ while (itimeout < MAX_ITER)
     fprintf('Linearizing...\n')
     clear Omega
     clear Sigma
-    [Omega,zeta,c_i_t] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,c_i_t,meas_ind,mu,true,useRelHeading,relHeading,LCobj);
+    [Omega,zeta,correspondences] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,correspondences,meas_ind,mu,true,useRelHeading,relHeading,LCobj);
     % reduce
 %%
     fprintf('Reducing...\n')
-    [OmegaReduced,zetaReduced] = GraphSLAM_reduce(timeSteps(startIdx:endIdx),stateSize,Omega,zeta,c_i_t);
+    [OmegaReduced,zetaReduced] = GraphSLAM_reduce(timeSteps(startIdx:endIdx),stateSize,Omega,zeta,correspondences);
 
     % solve
     fprintf('Solving...\n')
-    [mu, Sigma] = GraphSLAM_solve(OmegaReduced,zetaReduced,Omega,zeta,c_i_t);
+    [mu, Sigma] = GraphSLAM_solve(OmegaReduced,zetaReduced,Omega,zeta);
     %sanityCheck = Omega\zeta;
     %mu = .1*mu_last+.9*mu;
    itimeout=itimeout+1 ;
@@ -235,15 +238,15 @@ while (itimeout < MAX_ITER)
           plot(xVehBergframe(1,:) - xVehBergframe(1,1)  ,xVehBergframe(2,:) - xVehBergframe(2,1),'g')
           scatter(trueIgnxCloud(1,:),trueIgnxCloud(2,:),ones(1,size(trueIgnxCloud,2)),'g')
         end
-        scatter(-mapEsts(2,:),mapEsts(1,:),ones(1,size(mapEsts,2)),'k')
+        scatter(-mapEsts(2,:),mapEsts(1,:),ones(1,size(mapEsts,2)),colorz(mod(itimeout,5)+1))
           for qq = 1:5:endIdx-1
               B_R_Vi = Euler2RotMat(0,0,stateHist(5,qq));
               velocity = B_R_Vi*[stateHist(3:4,qq);0];
               scatter(-stateHist(2,qq),stateHist(1,qq),colorz(mod(qq,5)+1))
               quiver(-stateHist(2,qq),stateHist(1,qq),-velocity(2),velocity(1))
-              plotFeatures = find(c_i_t_last(:,qq)~=-17);
+              plotFeatures = find(correspondences.c_i_t(:,qq)~=-17);
 %               if(~isempty(plotFeatures))
-%                 scatter(-mapEsts(2,c_i_t_last(plotFeatures,qq)),mapEsts(1,c_i_t_last(plotFeatures,qq)), ones(size(mapEsts(1,c_i_t_last(plotFeatures,qq)))))
+%                 scatter(-mapEsts(2,correspondences.c_i_t_last(plotFeatures,qq)),mapEsts(1,correspondences.c_i_t_last(plotFeatures,qq)), ones(size(mapEsts(1,correspondences.c_i_t_last(plotFeatures,qq)))))
 %                 drawnow()
 %               end
          end
@@ -266,8 +269,8 @@ while (itimeout < MAX_ITER)
        %%
    end
    %%
-   figure(7); spy(c_i_t-c_i_t_last);
-    if ( sum(sum(c_i_t - c_i_t_last)) == 0 && itimeout >lcAllowance+1)
+   figure(7); spy(correspondences.c_i_t-correspondences_last.c_i_t);
+    if ( sum(sum(correspondences.c_i_t - correspondences_last.c_i_t)) == 0 && itimeout >lcAllowance+1)
         noNewFeatures = noNewFeatures+1;
     else
         noNewFeatures = 0;
@@ -275,9 +278,9 @@ while (itimeout < MAX_ITER)
     if ( noNewFeatures >= 4|| itimeout >=MAX_ITER) 
     %if (itimeout >=12)
         figure(3)
-%         for zz = 1:size(c_i_t,1)*size(c_i_t,2)
-%             if (c_i_t(zz) ~= -17)
-%                 scatter(-mapEsts(2,c_i_t(zz)),mapEsts(1,c_i_t(zz)), 2)   
+%         for zz = 1:size(correspondences.c_i_t,1)*size(correspondences.c_i_t,2)
+%             if (correspondences.c_i_t(zz) ~= -17)
+%                 scatter(-mapEsts(2,correspondences.c_i_t(zz)),mapEsts(1,correspondences.c_i_t(zz)), 2)   
 %                 hold on;
 %             end
 %         end
@@ -285,8 +288,8 @@ while (itimeout < MAX_ITER)
         break;
     end
    %keyboard
-   c_i_t = c_i_t_last;
-   %reinitializeMapEstimate = GraphSLAM_initializeMap(reshape(mu(1:stateSize*(endIdx-startIdx+1)),6,[]),rangeMeasurements,c_i_t);
+   correspondences = correspondences_last;
+   %reinitializeMapEstimate = GraphSLAM_initializeMap(reshape(mu(1:stateSize*(endIdx-startIdx+1)),6,[]),rangeMeasurements,correspondences.c_i_t);
    %mu = [mu(1:stateSize*(endIdx-startIdx+1));reshape(reinitializeMapEstimate,[],1)];
 end
 totalTime = toc(tstart)
@@ -314,9 +317,9 @@ totalTime = toc(tstart)
               velocity = B_R_Vi*[stateHist(3:4,qq);0];
               scatter(-stateHist(2,qq),stateHist(1,qq),colorz(mod(qq,5)+1))
               quiver(-stateHist(2,qq),stateHist(1,qq),-velocity(2),velocity(1))
-              plotFeatures = find(c_i_t_last(:,qq)~=-17);
+              plotFeatures = find(correspondences_last.c_i_t(:,qq)~=-17);
 %               if(~isempty(plotFeatures))
-%                 scatter(-mapEsts(2,c_i_t_last(plotFeatures,qq)),mapEsts(1,c_i_t_last(plotFeatures,qq)), ones(size(mapEsts(1,c_i_t_last(plotFeatures,qq)))))
+%                 scatter(-mapEsts(2,correspondences.c_i_t_last(plotFeatures,qq)),mapEsts(1,correspondences.c_i_t_last(plotFeatures,qq)), ones(size(mapEsts(1,correspondences.c_i_t_last(plotFeatures,qq)))))
 %                 drawnow()
 %               end
           end

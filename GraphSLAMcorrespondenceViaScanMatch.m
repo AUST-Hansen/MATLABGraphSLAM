@@ -1,8 +1,8 @@
-function [c_i_t_new,relHeading] = GraphSLAMcorrespondenceViaScanMatch(mu,c_i_t,posThreshold,probThreshold,RMStolerance,measIndices,rangeMeasurements,imagenex,imagenexSkip)
+function [correspondences_new,relHeading] = GraphSLAMcorrespondenceViaScanMatch(mu,correspondences,posThreshold,probThreshold,RMStolerance,measIndices,rangeMeasurements,imagenex,imagenexSkip,LCWeight,InlineWeight)
 
-% initialize c_i_t output
-c_i_t_new = c_i_t;
-Nstates = size(c_i_t,2);
+% initialize correspondences.c_i_t output
+correspondences_new = correspondences;
+Nstates = size(correspondences.c_i_t,2);
 stateSize = 6; % bad practice
 size(mu(stateSize*Nstates+1:end),1)/3;
 stateHist = reshape(mu(1:stateSize*Nstates),stateSize,[]);
@@ -19,15 +19,15 @@ for ii = 1:Nstates
     pos1 = stateHist(1:2,ii);
     heading1 = stateHist(5,ii);
     berg_R_veh1 = [cos(heading1), -sin(heading1) 0; sin(heading1), cos(heading1), 0;0,0,1];
-    pose1FeatureIndex = find (c_i_t(:,ii)~=-17);
-    featuresSeenAtPose1 = c_i_t(pose1FeatureIndex,ii);
+    pose1FeatureIndex = find (correspondences.c_i_t(:,ii)~=-17);
+    featuresSeenAtPose1 = correspondences.c_i_t(pose1FeatureIndex,ii);
     %pointCloud1 = mapFeatures(:,featuresSeenAtPose1);
     pointCloud1 = rangeMeasurements(:,measIndices(measIndices(1:ignxEndIdx,ii)~=-17,ii));
     pointCloudA = berg_R_veh1*pointCloud1 + repmat([pos1;0],1,size(pointCloud1,2));
     pointCloud1 = pointCloudA;
     for jj = ii+1:Nstates
         goodmatch = false;
-        if (sum(c_i_t(1:ignxEndIdx,ii) ~= -17) == 0)
+        if (sum(correspondences.c_i_t(1:ignxEndIdx,ii) ~= -17) == 0)
             continue
         end
         pos2 = stateHist(1:2,jj);
@@ -36,12 +36,12 @@ for ii = 1:Nstates
         % are they close-ish?
         % if they're close and EITHER not far apart in time, or we're
         % looking for loop closure with first few soundings
-        if ((norm(pos1-pos2) < posThreshold && abs(ii-jj)<15 ) || (ii < endLCidx && norm(pos1-pos2) < 3*posThreshold)  )
-            if (sum(c_i_t(:,jj) ~= -17) == 0)
+        if (norm(pos1-pos2) < posThreshold )
+            if (sum(correspondences.c_i_t(:,jj) ~= -17) == 0)
                 continue
             end
-            pose2FeatureIndex = find (c_i_t(:,jj)~=-17);
-            featuresSeenAtPose2 = c_i_t(pose2FeatureIndex,jj);
+            pose2FeatureIndex = find (correspondences.c_i_t(:,jj)~=-17);
+            featuresSeenAtPose2 = correspondences.c_i_t(pose2FeatureIndex,jj);
             %pointCloud2 = mapFeatures(:,featuresSeenAtPose2);
             pointCloud2 = rangeMeasurements(:,measIndices(measIndices(1:ignxEndIdx,jj)~=-17,jj));
             pointCloudB = berg_R_veh2*pointCloud2 + repmat([pos2;0],1,size(pointCloud2,2));
@@ -64,8 +64,13 @@ for ii = 1:Nstates
                     % kk is the index in pointCloud2
                     % idxKNN(kk) is the corresponding index in pointCloud1
                     %
-                    if (isempty(   intersect(c_i_t_new(:,jj), c_i_t_new(pose1FeatureIndex(idxKNN(kk)),ii)))) % mutex constraint
-                        c_i_t_new(pose2FeatureIndex(kk),jj) = c_i_t_new(pose1FeatureIndex(idxKNN(kk)),ii);
+                    if (isempty(   intersect(correspondences_new.c_i_t(:,jj), correspondences_new.c_i_t(pose1FeatureIndex(idxKNN(kk)),ii)))) % mutex constraint
+                        correspondences_new.c_i_t(pose2FeatureIndex(kk),jj) = correspondences_new.c_i_t(pose1FeatureIndex(idxKNN(kk)),ii);
+                        if (abs(jj - ii) > 600)
+                            correspondences_new.weight(pose2FeatureIndex(kk),jj) = LCWeight;
+                        else
+                            correspondences_new.weight(pose2FeatureIndex(kk),jj) = InlineWeight;
+                        end
                         %fprintf('match between %d and %d\n',ii,jj)
                         goodmatch = true;
                     end
@@ -103,7 +108,7 @@ for ii = 1:Nstates
     
 end
     % Retire unseen features
-UniqueFeatures = unique(c_i_t_new(c_i_t_new>0))
+UniqueFeatures = unique(correspondences_new.c_i_t(correspondences_new.c_i_t>0))
 for iNew = 1:length(UniqueFeatures)
-    c_i_t_new(c_i_t_new==UniqueFeatures(iNew)) = iNew;
+    correspondences_new.c_i_t(correspondences_new.c_i_t==UniqueFeatures(iNew)) = iNew;
 end

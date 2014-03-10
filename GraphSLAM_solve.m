@@ -1,4 +1,4 @@
-function [mu, Sigma] = GraphSLAM_solve(OmegaReduced,zetaReduced,Omega,zeta,c_i_t)
+function [mu, Sigma] = GraphSLAM_solve(OmegaReduced,zetaReduced,Omega,zeta)
 
     Sigma = inv(OmegaReduced);
     %Sigma = 0;

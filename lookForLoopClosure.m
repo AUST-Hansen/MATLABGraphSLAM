@@ -1,20 +1,37 @@
-function c_i_t_new = lookForLoopClosure(c_i_t,rangeMeasurements,measurementTimestamps,probThreshold)
+function correspondences_new = lookForLoopClosure(correspondences,rangeMeasurements,measurementTimestamps,probThreshold,LCWeight,varargin)
 
 jj=1;
 offset = 680;
-c_i_t_new = c_i_t;
-pose1FeatureIndex = find (c_i_t(:,jj)~=-17);
-featuresSeenAtPose1 = c_i_t(pose1FeatureIndex,jj);
+endidx = size(measurementTimestamps,2);
+correspondences_new = correspondences;
+pose1FeatureIndex = find (correspondences.c_i_t(:,jj)~=-17);
+featuresSeenAtPose1 = correspondences.c_i_t(pose1FeatureIndex,jj);
 pointCloud1 = rangeMeasurements(:,featuresSeenAtPose1);
 resids = 1000*ones(size(measurementTimestamps));
+DEBUG = false;
+% Parse varargin
+nVarargs = length(varargin);
+if(~isempty(varargin))
+    for k = 1:nVarargs
+        switch(varargin{k})
+            case{'MinIndex'}
+                offset = varargin{k+1};
+            case{'MaxIndex'}
+                endidx = varargin{k+1};
 
-for ii = jj+offset:size(measurementTimestamps,2)
+            case{'DEBUG'}
+                DEBUG = true;
+        end %switch
+    end %for
+end %if
+
+for ii = jj+offset:endidx
     % build poses
-    pose2FeatureIndex = find (c_i_t(:,ii)~=-17);
+    pose2FeatureIndex = find (correspondences.c_i_t(:,ii)~=-17);
     if (isempty(pose2FeatureIndex))
         continue
     end
-    featuresSeenAtPose2 = c_i_t(pose2FeatureIndex,ii);
+    featuresSeenAtPose2 = correspondences.c_i_t(pose2FeatureIndex,ii);
     pointCloud2 = rangeMeasurements(:,featuresSeenAtPose2);
     % do icp
     [R,T,ERR,idxKNN,dKNN] = robustScanMatch(pointCloud1,pointCloud2);
@@ -30,8 +47,8 @@ lcResids = resids;
 lcResids(1:50) = 1000;
 %% look for loop closure
 [y,ii]=min(lcResids);
-pose2FeatureIndex = find (c_i_t(:,ii)~=-17);
-featuresSeenAtPose2 = c_i_t(pose2FeatureIndex,ii);
+pose2FeatureIndex = find (correspondences.c_i_t(:,ii)~=-17);
+featuresSeenAtPose2 = correspondences.c_i_t(pose2FeatureIndex,ii);
 pointCloud2 = rangeMeasurements(:,featuresSeenAtPose2);
 % do icp
 [R,T,ERR,idxKNN,dKNN] = robustScanMatch(pointCloud1,pointCloud2,'MaxIterations',200);
@@ -40,23 +57,23 @@ pNew = R*pointCloud2 + repmat(T,1,size(pointCloud2,2));
 goodmatch = false;
 for kk = 1:length(idxKNN)
     if (dKNN(kk) <= probThreshold)
-        if (isempty(   intersect(c_i_t_new(:,ii), c_i_t_new(pose1FeatureIndex(idxKNN(kk)),jj)))) % mutex constraint
-            c_i_t_new(pose2FeatureIndex(kk),ii) = c_i_t_new(pose1FeatureIndex(idxKNN(kk)),jj);
+        if (isempty(   intersect(correspondences_new.c_i_t(:,ii), correspondences_new.c_i_t(pose1FeatureIndex(idxKNN(kk)),jj)))) % mutex constraint
+            correspondences_new.c_i_t(pose2FeatureIndex(kk),ii) = correspondences_new.c_i_t(pose1FeatureIndex(idxKNN(kk)),jj);
             fprintf('match between %d and %d\n',jj,ii)
             goodmatch = true;
-
+            correspondences_new.weight(pose2FeatureIndex(kk),ii) = LCWeight;
         end
     end
 end
 
     % Retire unseen features
-UniqueFeatures = unique(c_i_t_new(c_i_t_new>0));
+UniqueFeatures = unique(correspondences_new.c_i_t(correspondences_new.c_i_t>0));
 for iNew = 1:length(UniqueFeatures)
-    c_i_t_new(c_i_t_new==UniqueFeatures(iNew)) = iNew;
+    correspondences_new.c_i_t(correspondences_new.c_i_t==UniqueFeatures(iNew)) = iNew;
 end
 
 %%%%%% DEBUG stuff
-if (true)
+if (DEBUG)
     figure(9)
     hold on; axis equal;
     for qq = 1:length(featuresSeenAtPose1)

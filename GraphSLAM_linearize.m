@@ -1,9 +1,9 @@
-function [Omega,zeta,c_i_t_new] = GraphSLAM_linearize(timeStamps,inputs,measTimestamps,sensor,rangeMeasurements,dvl,dvlReadings,correspondences,meas_ind,fullStateEstimate,haveInitialized,useRelHeading,relHeading,LCobj)
+function [Omega,zeta,correspondences_new] = GraphSLAM_linearize(timeStamps,inputs,measTimestamps,sensor,rangeMeasurements,dvl,dvlReadings,correspondences,meas_ind,fullStateEstimate,haveInitialized,useRelHeading,relHeading,LCobj)
 
 Nstates = size(timeStamps,2);
 stateSize = 6;
 NmapObservations = size(rangeMeasurements,2);
-NmapFeatures = sum(unique(correspondences)>0); %max(max(correspondences)); %NmapObservations;
+NmapFeatures = sum(unique(correspondences.c_i_t)>0); %max(max(correspondences)); %NmapObservations;
 stateEstimate = reshape(fullStateEstimate(1:stateSize*Nstates),stateSize,[]);
 mapEstimate = reshape(fullStateEstimate(stateSize*Nstates+1:end),3,[]);
 % state has position, velocity, and heading info, as well as berg omega
@@ -159,12 +159,12 @@ end
 %% Measurements
 
 fprintf('\nMeasurements...\n')
-FeatureIndices = unique(correspondences);
+FeatureIndices = unique(correspondences.c_i_t);
 FeatureIndices = FeatureIndices(2:end); % remove -17
 counter = 0;
 % for mapFeatureIterator = 1:length(FeatureIndices)%NmapFeatures;
 %     j = FeatureIndices(mapFeatureIterator);
-%     [j_s,i_s] = find(correspondences == j);
+%     [j_s,i_s] = find(correspondences.c_i_t == j);
 %     for idummy = 1:length(i_s)
 %         ii = i_s(idummy);
 %         jj = j_s(idummy);
@@ -174,11 +174,11 @@ for ii = 1:Nstates
     B_R_V = Euler2RotMat(0,0,stateEstimate(5,ii)); 
     V_R_B = B_R_V';
     for jj = 1:sum(meas_ind(:,ii) ~= -17)
-        j = correspondences(jj,ii);
+        j = correspondences.c_i_t(jj,ii);
             %fprintf('ii: %d, jj: %d, j: %d\n',ii, jj,j)
         measIndex = meas_ind(jj,ii); 
         mapFeatureIterator = j;
-        %if(correspondences(jj,ii) == j)
+        %if(correspondences.c_i_t(jj,ii) == j)
             %expectedMeasurement = B_R_V'*(mapEstimate(:,j) - [stateEstimate(1:2,ii); 0] + [0 0 eps]') ;
             %expectedMeasurement = B_R_V'*(-[stateEstimate(1:2,ii); 0] + [0 0 eps]') ;
             % build covariance
@@ -244,7 +244,7 @@ for ii = 1:Nstates
     
     
 end
-c_i_t_new = correspondences;
+correspondences_new.c_i_t = correspondences.c_i_t;
 
 
 for ii = 1:Nstates
@@ -288,7 +288,7 @@ end
 % if(haveInitialized)
 %     for jjj = 1:length(remainingFeatures)
 %         
-%         c_i_t_new(correspondences==remainingFeatures(jjj)) = jjj;
+%         correspondences_new.c_i_t(correspondences.c_i_t==remainingFeatures(jjj)) = jjj;
 %         if(mod(jjj,50))
 %             fprintf('%d\n',jjj)
 %         end

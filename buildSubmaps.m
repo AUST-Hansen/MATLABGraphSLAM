@@ -1,4 +1,4 @@
-function Submaps = buildSubmaps(Velocities,Eulers,Length,measurements, c_i_t)
+function Submaps = buildSubmaps(Velocities,Eulers,Length,measurements, correspondences)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
@@ -38,7 +38,7 @@ Submap = [];
 for i_map = 1:NumSubmaps
     Subtrajectory = x_veh(:,i_map*Length-(Length-1):i_map*Length);
     SubEuler = Eulers(:,i_map*Length-(Length-1):i_map*Length);
-    SubCIT = c_i_t(:,i_map*Length-(Length-1):i_map*Length);
+    SubCIT = correspondences.c_i_t(:,i_map*Length-(Length-1):i_map*Length);
     Submap.refIndex = (i_map-1)*Length + refInd;
     I_R_ref = Euler2RotMat(SubEuler(1,refInd),SubEuler(2,refInd),SubEuler(3,refInd));
     cloud = [];
