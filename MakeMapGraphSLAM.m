@@ -25,13 +25,13 @@ skip = 1;     % for now, this must be 1 also
 rangeSkipReson = 3;
 rangeSkipImagenex = 1;
 poseSkip = 3;
-endIdx = 700;
+endIdx = 130;
 stateSize = 6;
 % Imagenex matching parameters
 addpath ransac
 ignx_sparsity = 3;
-scanmatch_threshold = 10; % only look for matches within this many meters of pose difference
-scanmatch_RMStolerance = 1.;
+scanmatch_threshold = 15; % only look for matches within this many meters of pose difference
+scanmatch_RMStolerance = 2.;
 scanmatch_probThreshold = 1.; 
 % Use imagenex, multibeam and DVL ranges in observations?
 useDVLRanges = false;
@@ -42,7 +42,7 @@ LCWeight = 10;
 InlineWeight = .001;
 % give loop closure a few iterations to do its thing
 lcAllowance = 2;
-MAX_ITER = 3;
+MAX_ITER = 10;
 %% Read in Data
 fprintf('Reading in Data...\n')
 addpath ..
@@ -91,7 +91,7 @@ initialStateEstimate = GraphSLAM_initialize(timeSteps(startIdx:endIdx),inputs,in
 fprintf('Initializing Map Features...\n')
 initialMapEstimate = GraphSLAM_initializeMap(initialStateEstimate,rangeMeasurements,correspondences);
 initialFullStateEstimate = [reshape(initialStateEstimate,[],1); reshape(initialMapEstimate,[],1)];
-%% Calculate inzformation form of full posterior
+%% Calculate information form of full posterior
 fprintf('Linearizing...\n')
 [Omega,zeta] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,correspondences,meas_ind,initialFullStateEstimate,false,false,[],[]);%LCobj);
 %% initial testing stuff
@@ -148,6 +148,7 @@ drawnow;
 % hold on; axis equal;
 % scatter(pNew(1,:),pNew(2,:),'b')
 %% Reduce graph by marginalizing 
+%[Omega,zeta,correspondences] = GraphSLAM_linearize(timeSteps(startIdx:endIdx),inputs,measurementTimestamps,imagenex,rangeMeasurements,dvl,dvlData,correspondences,meas_ind,state,true,false,[],LCobj);
 [OmegaReduced,zetaReduced] = GraphSLAM_reduce(timeSteps(startIdx:endIdx),stateSize,Omega,zeta,correspondences);
 % state2 = OmegaReduced\zetaReduced;
 % stateHist2 = reshape(state2,6,[]);
@@ -163,13 +164,14 @@ fprintf('Solving...\n')
 figure(12)
 plot(xVehBergframe(1,:) - xVehBergframe(1,1)  ,xVehBergframe(2,:) - xVehBergframe(2,1),'g')
 hold on; axis equal
-plot(-stateHist(2,:),stateHist(1,:),'k')
-scatter(-mapEsts(2,:),mapEsts(1,:),ones(1,size(mapEsts,2)),'k')
 stateHist = reshape(mu(1:6*endIdx),6,[]);
 mapEsts = reshape(mu(6*endIdx+1:end),3,[]);
+plot(-stateHist(2,:),stateHist(1,:),'k')
+scatter(-mapEsts(2,:),mapEsts(1,:),ones(1,size(mapEsts,2)),'k')
+
 
 %% try to identify loop closure
-correspondences = lookForLoopClosure(correspondences,rangeMeasurements,measurementTimestamps,scanmatch_probThreshold,LCWeight,'MinIndex',680,'MaxIndex',684);
+%correspondences = lookForLoopClosure(correspondences,rangeMeasurements,measurementTimestamps,scanmatch_probThreshold,LCWeight,'MinIndex',680,'MaxIndex',684);
 
 % Timeout counter for main loop
 %%
@@ -179,7 +181,7 @@ correspondences.c_i_t_last = correspondences.c_i_t;
 figure(10);spy(Omega)
 
 lastMu = mu(1:stateSize*(endIdx-startIdx));
-figure(20); hold on; title('trajectory resids')
+figure(20); hold on; title('trajectory innovations')
 useRelHeading = false;
 relHeading = [];
 while (itimeout < MAX_ITER) 

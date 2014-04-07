@@ -28,7 +28,7 @@ processNoise(1:2,1:2) = 1e-12*eye(2);
 processNoise(3,3) = 1e-4;
 processNoise(4,4) = 1e-4;
 processNoise(5,5) = 1e-8;     % gyro noise
-processNoise(end,end) = 1e-8; % bias driver
+processNoise(end,end) = 1e-10; % bias driver
 QinvSM =5;
 %% Motion model
 for ii = 1:Nstates-1
@@ -253,7 +253,7 @@ for ii = 1:Nstates
     
 %     %% omega:
     % initial idea: 2*sigma = .01, so sigma = .005. 1/.005^2 = 40000
-    penalty = 100; % 1/covariance of expected measurement
+    penalty = 10000; % 1/covariance of expected measurement
     % Penalize large omega
     Homega = [0 0 0 0 0 1];
     zMeasOmega = stateEstimate(6,ii);

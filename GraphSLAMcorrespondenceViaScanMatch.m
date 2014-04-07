@@ -1,4 +1,18 @@
-function [correspondences_new,relHeading] = GraphSLAMcorrespondenceViaScanMatch(mu,correspondences,posThreshold,probThreshold,RMStolerance,measIndices,rangeMeasurements,imagenex,imagenexSkip,LCWeight,InlineWeight)
+function [correspondences_new,relHeading] = GraphSLAMcorrespondenceViaScanMatch(mu,correspondences,posThreshold,probThreshold,RMStolerance,measIndices,rangeMeasurements,imagenex,imagenexSkip,LCWeight,InlineWeight,varargin)
+
+DEBUG = false;
+stateHist = [];
+
+if(~isempty(varargin))
+    for k = 1:nVarargs
+        switch(varargin{k})
+            case{'State'}
+                stateHist = varargin{k+1};
+            case{'DEBUG'}
+                DEBUG = true;
+        end %switch
+    end %for
+end %if
 
 % initialize correspondences.c_i_t output
 correspondences_new = correspondences;
@@ -78,12 +92,13 @@ for ii = 1:Nstates
             end
             if (goodmatch)
                 relHeading.validMatch(ii,jj) = 1;
-                relHeading.deltaHeading(ii,jj) = -asin(R(1,2));
+                relHeadingMat = berg_R_veh1'*R*berg_R_veh2;
+                relHeading.deltaHeading(ii,jj) = -asin(relHeadingMat(1,2));
             end
         end
         
         %%%%%% DEBUG stuff
-        if (false && rand()< 1  && goodmatch == true  )
+        if (DEBUG && rand()< 1  && goodmatch == true  )
             figure(9)
             hold on; axis equal;
             for qq = 1:length(featuresSeenAtPose1)

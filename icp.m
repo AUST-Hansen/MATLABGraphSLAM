@@ -131,6 +131,8 @@ inp.addParamValue('WorstRejection', 0, @(x)isscalar(x) && x > 0 && x < 1);
 
 inp.addParamValue('twoDee', false, @(x)islogical(x));
 
+inp.addParamValue('Regularized',false,@(x)islogical(x));
+
 inp.parse(q,p,varargin{:});
 arg = inp.Results;
 clear('inp');
@@ -349,7 +351,7 @@ q_mark = q_mark .* repmat(weights, 3, 1);
 p_bar = p * transpose(weights);
 p_mark = p - repmat(p_bar, 1, m);
 % Apply weights
-%p_mark = p_mark .* repmat(weights, 3, 1);
+p_mark = p_mark .* repmat(weights, 3, 1);
 
 N = p_mark*transpose(q_mark); % taking points of q in matched order
 
@@ -374,13 +376,13 @@ weights = weights ./ sum(weights);
 
 % find data centroid and deviations from centroid
 q_bar = q * transpose(weights);
-q_mark = q - repmat(q_bar, 1, n);
+q_mark = q;% - repmat(q_bar, 1, n);
 % Apply weights
 q_mark = q_mark .* repmat(weights, 2, 1);
 
 % find data centroid and deviations from centroid
 p_bar = p * transpose(weights);
-p_mark = p - repmat(p_bar, 1, m);
+p_mark = p ;%- repmat(p_bar, 1, m);
 % Apply weights
 %p_mark = p_mark .* repmat(weights, 3, 1);
 

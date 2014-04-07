@@ -151,8 +151,12 @@ end
 %[TR,TT,ER] = icp(smooth1,smooth2,20,'WorstRejection',worstRejection);
 %[TR,TT,ER] = icp(pc1,pc2,10,'WorstRejection',worstRejection,'Weight',@weighting);
 try
-    [TR,TT,ER] = icp(pc1,pc2,10,'WorstRejection',worstRejection);
+    [TR,TT,ER] = icp(pc1,pc2,10,'WorstRejection',worstRejection,'Minimize','lmapoint');
 catch
+    fprintf('caught icp error\n')
+    TR = eye(3);
+    TT = zeros(3,1);
+    ER = inf;
     keyboard;
 end
 cloud2 = TR*pointCloud2 + repmat(TT,1,lenQ);
