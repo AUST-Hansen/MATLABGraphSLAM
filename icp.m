@@ -376,7 +376,7 @@ weights = weights ./ sum(weights);
 
 % find data centroid and deviations from centroid
 q_bar = q * transpose(weights);
-q_mark = q;% - repmat(q_bar, 1, n);
+q_mark = q ;%- repmat(q_bar, 1, n);
 % Apply weights
 q_mark = q_mark .* repmat(weights, 2, 1);
 
