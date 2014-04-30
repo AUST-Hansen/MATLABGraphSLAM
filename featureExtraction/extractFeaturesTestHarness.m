@@ -6,16 +6,17 @@ pointCloud1 = pointCloud;
 load wallSegmentPass2.mat
 pointCloud2 = pointCloud;
 clear pointCloud
+DEBUG = true;
 
-% pointStart = 20000;
-% pointEnd = 24000; %round(length(pointCloud)/10);
-% pointStart2 = 18000;
+pointStart = 10000;
+pointEnd = 24000; %round(length(pointCloud)/10);
+pointStart2 = 8000;
+pointEnd2 = 25000; %round(length(pointCloud)/10);
+% pointStart = 17000;
+% pointEnd = 22000; %round(length(pointCloud)/10);
+% pointStart2 = 19000;
 % pointEnd2 = 23000; %round(length(pointCloud)/10);
-pointStart = 18000;
-pointEnd = 22000; %round(length(pointCloud)/10);
-pointStart2 = 19000;
-pointEnd2 = 23000; %round(length(pointCloud)/10);
-sparsity = 4;
+sparsity = 6;
 
 
 % focus on smaller, subsampled cloud for initial testing
@@ -23,19 +24,31 @@ subCloud1 = pointCloud1(:,pointStart:sparsity:pointEnd) + .00*rand(size(pointClo
 subCloud2 = pointCloud2(:,pointStart2:sparsity:pointEnd2) + .0*rand(size(pointCloud2(:,pointStart2:sparsity:pointEnd2)));
 subCloud1 = subCloud1 - repmat(mean(subCloud1,2),1,size(subCloud1,2));
 subCloud2 = subCloud2 - repmat(mean(subCloud2,2),1,size(subCloud2,2));
-
 sprsty = 1;
 
 % clean subclouds based on statistical surface characterization
 subCloud1 = cleanCloud(subCloud1,'kNeighbors',40,'alpha',1);
-subCloud2 =cleanCloud(subCloud2,'kNeighbors',40,'alpha',1);
+subCloud2 = cleanCloud(subCloud2,'kNeighbors',40,'alpha',1);
+
+if (DEBUG)
+    figure
+    offset = 0*ones(size(subCloud2));
+    offset(3,:) = 0;
+    showCloud2 = subCloud2+offset;
+    
+    axis equal
+    hold on
+    scatter3(subCloud1(2,1:sprsty:end),subCloud1(1,1:sprsty:end),-subCloud1(3,1:sprsty:end),3*ones(1,size(subCloud1(1,1:sprsty:end),2)),'c');
+    scatter3(showCloud2(2,1:sprsty:end),showCloud2(1,1:sprsty:end),-showCloud2(3,1:sprsty:end),3*ones(1,size(subCloud2(1,1:sprsty:end),2)),'g^');
+    view(-165,6)
+end
 %subCloud1 = subCloud1 - repmat(mean(subCloud1,2),1,size(subCloud1,2));
 %subCloud2 = subCloud2 - repmat(mean(subCloud2,2),1,size(subCloud2,2));
-
+%%
 tic
-[measurements1, descriptors1] = extractFeaturesFromSubmap(subCloud1,'Verbose',false,'minRadius',3,'maxRadius',6,'numRadii',6,'Sparsity',12,'PFHbins',3);
+[measurements1, descriptors1] = extractFeaturesFromSubmap(subCloud1,'Verbose',false,'minRadius',3,'maxRadius',7,'numRadii',4,'Sparsity',5,'PFHbins',4);
 toc
-[measurements2, descriptors2] = extractFeaturesFromSubmap(subCloud2,'Verbose',false,'minRadius',3,'maxRadius',6,'numRadii',6,'Sparsity',12,'PFHbins',3);
+[measurements2, descriptors2] = extractFeaturesFromSubmap(subCloud2,'Verbose',false,'minRadius',3,'maxRadius',7,'numRadii',4,'Sparsity',5,'PFHbins',4);
 
 %%
 map = figure();
@@ -46,7 +59,7 @@ for ii = 1:length(measurements1)
     %text(measurements1(2,ii),measurements1(1,ii),-measurements1 (3,ii),num2str(ii))
 end
 offset = 40*ones(size(subCloud2));
-offset(3,:) = 0;
+offset(3,:) = -20;
 
 showCloud2 = subCloud2+offset;
 showMeas2 = measurements2+offset(:,1:length(measurements2));
@@ -56,7 +69,7 @@ hold on
 scatter3(subCloud1(2,1:sprsty:end),subCloud1(1,1:sprsty:end),-subCloud1(3,1:sprsty:end),3*ones(1,size(subCloud1(1,1:sprsty:end),2)),'c');
 scatter3(measurements1(2,:),measurements1(1,:),-measurements1(3,:),'ko');
 scatter3(showCloud2(2,1:sprsty:end),showCloud2(1,1:sprsty:end),-showCloud2(3,1:sprsty:end),3*ones(1,size(subCloud2(1,1:sprsty:end),2)),'g^');
-scatter3(showMeas2(2,:),showMeas2(1,:),-showMeas2(3,:),'ro');
+scatter3(showMeas2(2,:),showMeas2(1,:),-showMeas2(3,:),'rx');
 
 for ii = 1:length(showMeas2)
     %text(showMeas2(2,ii),showMeas2(1,ii),-showMeas2(3,ii),num2str(ii))
@@ -117,7 +130,7 @@ matches;
 % 
 % scatter3(q4(2,:),q4(1,:),-q4(3,:),'k^');
 %%
-SC1 = subCloud1 - repmat(mean(subCloud1,2),1,size(subCloud1,2));
+%SC1 = subCloud1 - repmat(mean(subCloud1,2),1,size(subCloud1,2));
 [TR, TT] = icp(subCloud1,subCloud2,'WorstRejection',.5);
 
 plotsparsity = 1;

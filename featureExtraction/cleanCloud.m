@@ -34,8 +34,8 @@ dists = mean(dK,2)
 
 cov = std(dists)
 
-figure;
-plot(dists);
+
+
 
 inliers = dists > mean(dists) - arg.alpha*cov & dists < mean(dists) + arg.alpha*cov;
 

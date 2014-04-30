@@ -15,7 +15,7 @@ inp.addOptional('maxRadius', 4.0, @(x)isscalar(x) && x > 0);
 
 inp.addOptional('numRadii', 4, @(x)isscalar(x) && x > 0);
 
-inp.addOptional('MinNeighbors', 4, @(x)isscalar(x) && x > 0); % multiplier on radius
+inp.addOptional('MinNeighbors', 5, @(x)isscalar(x) && x > 0); % multiplier on radius
 
 inp.addOptional('Sparsity', 1, @(x)isscalar(x) && x > 0);
 
@@ -43,23 +43,15 @@ else
 end
 
 multi_level = cell(length(Radius),1);
-%%
-for i_rad = 1:length(Radius)
-    fprintf('r = %d\n',Radius(i_rad))
-    normals = zeros(size(cloud));
-    curvatures = zeros(3,length(cloud)); % third column is orientation
-    subSampledCloud = cloud(:,1:arg.Sparsity:end);
-    % for each point in
-    neighborIndices = rangesearch(cloud',cloud',Radius(i_rad));
-    measurements = zeros(size(cloud));
-    measindices = zeros(1,size(cloud,2));
-    descriptors = zeros(arg.PFHbins^3,size(cloud,2));
-    measurementsCounter = 0;
+subSampledCloud = cloud(:,1:arg.Sparsity:end);
+normals = zeros(size(cloud));
+  %% Precalculate all normals  
     fprintf('calculating normals...\n');
+    neighborIndices = rangesearch(cloud',cloud',Radius(1));
     for ii = 1:length(cloud)
         
         % weed out borders and spurious points
-        if(length(neighborIndices{ii})<(arg.MinNeighbors*Radius(i_rad)))
+        if(length(neighborIndices{ii})<(arg.MinNeighbors*Radius(1)))
             continue;
         end
         
@@ -92,13 +84,68 @@ for i_rad = 1:length(Radius)
         end
         
     end
-    %figure; plot(curvatures')
-    % have to do the above so that I have all the normals for calculating Point
-    % Feature Histograms
+size(normals)
+
+    %% Cache PFH info
+sparseIdx = 1;
+cacheflag = zeros(length(cloud));
+cache = zeros(length(cloud),length(cloud),3);
+neighborIndices = rangesearch(cloud',subSampledCloud',Radius(end));    
+tic
+    for ii = 1:length(subSampledCloud)
+        
+        if (mod(ii,15) == 0)
+            fprintf('%d of %d points\n',ii,length(subSampledCloud))
+        end
+        % weed out borders and spurious points
+        if(length(neighborIndices{ii})<arg.MinNeighbors)
+            continue;
+        end
+        %if and(and(subCurvatures(1,ii) > arg.MinCurve, subCurvatures(1,ii) < arg.MaxCurve), and(subCurvatures(2,ii) > arg.MinCurve, subCurvatures(2,ii) < arg.MaxCurve ))
+        % good keypoint. Now describe it
+        P = cloud(:,neighborIndices{ii});
+        patchNormals = normals(:,neighborIndices{ii});
+        descriptor = zeros(arg.PFHbins^3,1);
+        for jj = 1:length(P)-1
+            for kk = jj+1:length(P)
+                
+                if(~cacheflag(neighborIndices{ii}(jj),neighborIndices{ii}(kk)) )
+                    n1 = patchNormals(:,jj);
+                    n2 = patchNormals(:,kk);
+                    p1 = P(:,jj);
+                    p2 = P(:,kk);
+                    % start calculating point feature histogram
+                    unitDP = (p2-p1)/norm(p2-p1);
+                    u = n1;
+                    v = cross(u,unitDP);
+                    w = cross(u,v);
+                    alpha = acos(v'*n2); % -1:1
+                    phi = acos(u'*unitDP); % -1:1
+                    theta = atan2(w'*n2,u'*n2); %-pi:pi
+                    % store values
+                    cache(neighborIndices{ii}(jj),neighborIndices{ii}(kk),1) = alpha;
+                    cache(neighborIndices{ii}(jj),neighborIndices{ii}(kk),2) = phi;
+                    cache(neighborIndices{ii}(jj),neighborIndices{ii}(kk),3) = theta;
+                    % set flag so we don't compute again
+                    cacheflag(neighborIndices{ii}(jj),neighborIndices{ii}(kk)) = 1;
+                else
+                    continue
+                end
+            end
+        end
+        %end
+    end
+    toc
+
     
     
-    
-    neighborIndices = rangesearch(cloud',subSampledCloud',Radius(i_rad));
+for i_rad = 1:length(Radius)
+    fprintf('r = %d\n',Radius(i_rad))
+    % for each point in
+    measurements = zeros(size(cloud));
+    measindices = zeros(1,size(cloud,2));
+    descriptors = zeros(arg.PFHbins^3,size(cloud,2));
+    measurementsCounter = 0;
     subCurvatures = curvatures(:,1:arg.Sparsity:end);
     
     
@@ -119,18 +166,9 @@ for i_rad = 1:length(Radius)
         descriptor = zeros(arg.PFHbins^3,1);
         for jj = 1:length(P)-1
             for kk = jj+1:length(P)
-                n1 = patchNormals(:,jj);
-                n2 = patchNormals(:,kk);
-                p1 = P(:,jj);
-                p2 = P(:,kk);
-                % start calculating point feature histogram
-                unitDP = (p2-p1)/norm(p2-p1);
-                u = n1;
-                v = cross(u,unitDP);
-                w = cross(u,v);
-                alpha = acos(v'*n2); % -1:1
-                phi = acos(u'*unitDP); % -1:1
-                theta = atan2(w'*n2,u'*n2); %-pi:pi
+                alpha = cache(neighborIndices{ii}(jj),neighborIndices{ii}(kk),1);
+                phi = cache(neighborIndices{ii}(jj),neighborIndices{ii}(kk),2); % -1:1
+                theta = cache(neighborIndices{ii}(jj),neighborIndices{ii}(kk),3); %-pi:pi
                 % calculate indices into subhistograms
                 ialpha = int8(floor((alpha)/(pi)*arg.PFHbins ));
                 iphi = int8(floor((phi)/(pi)*arg.PFHbins ));
@@ -138,7 +176,6 @@ for i_rad = 1:length(Radius)
                 descriptorIndex = arg.PFHbins^2*(ialpha) + arg.PFHbins*(iphi) + itheta + 1;
                 % add it to the histogram
                 descriptor(descriptorIndex) = descriptor(descriptorIndex) + 1;
-                
             end
         end
         if (arg.Verbose)
@@ -206,6 +243,7 @@ if length(multi_level)>1
     end
     measurements_out = measurements_out(:,1:persistCount-1);
     descriptors_out = descriptors_out(:,1:persistCount-1);
+    persistCount
 else
     measurements_out = measurements;
     descriptors_out = descriptors;
