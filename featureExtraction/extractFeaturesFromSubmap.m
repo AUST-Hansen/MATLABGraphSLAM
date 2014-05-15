@@ -25,6 +25,10 @@ inp.addOptional('MaxCurve', .3, @(x)isscalar(x) && x > 0);
 
 inp.addOptional('PFHbins', 5,@(x) x > 0);
 
+inp.addOptional('VertMargin',.2,@(x)isscalar(x) && x > 0 && x<.5);
+
+inp.addOptional('HorizMargin',.2,@(x)isscalar(x) && x > 0 && x<.5);
+
 %validMinimize = {'point','plane','lmapoint'};
 %inp.addParamValue('Minimize', 'point', @(x)any(strcmpi(x,validMinimize)));
 %inp.addParamValue('Triangulation', [], @(x)isreal(x) && size(x,2) == 3);
@@ -43,8 +47,21 @@ else
 end
 
 multi_level = cell(length(Radius),1);
-subSampledCloud = cloud(:,1:arg.Sparsity:end);
+% calculate margins
+maxZ = max(cloud(3,:));
+minZ = min(cloud(3,:));
+maxX = max(cloud(1,:));
+minX = min(cloud(1,:));
+Zrange = maxZ-minZ;
+Xrange = maxX-minX;
+topZ = maxZ - arg.VertMargin*Zrange;
+botZ = minZ + arg.VertMargin*Zrange;
+topX = maxX - arg.HorizMargin*Xrange;
+botX = minX + arg.HorizMargin*Xrange;
+subSampledCloud = cloud(:,cloud(3,:)<topZ & cloud(3,:)>botZ & cloud(1,:)<topX & cloud(1,:)>botX);
+subSampledCloud = subSampledCloud(:,1:arg.Sparsity:end);
 normals = zeros(size(cloud));
+
   %% Precalculate all normals  
     fprintf('calculating normals...\n');
     neighborIndices = rangesearch(cloud',cloud',Radius(1));
@@ -88,18 +105,22 @@ size(normals)
 
     %% Cache PFH info
 sparseIdx = 1;
-cacheflag = zeros(length(cloud));
-cache = zeros(length(cloud),length(cloud),3);
+cacheflag = logical(zeros(length(cloud)));
+cache = zeros(length(subSampledCloud),length(subSampledCloud),3);
 neighborIndices = rangesearch(cloud',subSampledCloud',Radius(end));    
 tic
-    for ii = 1:length(subSampledCloud)
+    for ii = 1:size(subSampledCloud,2)
         
         if (mod(ii,15) == 0)
             fprintf('%d of %d points\n',ii,length(subSampledCloud))
         end
         % weed out borders and spurious points
-        if(length(neighborIndices{ii})<arg.MinNeighbors)
-            continue;
+        try
+            if(length(neighborIndices{ii})<arg.MinNeighbors)
+                continue;
+            end
+        catch
+            keyboard
         end
         %if and(and(subCurvatures(1,ii) > arg.MinCurve, subCurvatures(1,ii) < arg.MaxCurve), and(subCurvatures(2,ii) > arg.MinCurve, subCurvatures(2,ii) < arg.MaxCurve ))
         % good keypoint. Now describe it
@@ -146,11 +167,11 @@ for i_rad = 1:length(Radius)
     measindices = zeros(1,size(cloud,2));
     descriptors = zeros(arg.PFHbins^3,size(cloud,2));
     measurementsCounter = 0;
-    subCurvatures = curvatures(:,1:arg.Sparsity:end);
+    %subCurvatures = curvatures(:,1:arg.Sparsity:end);
     
     
         fprintf('calculating patches from subsampled cloud...\n');
-    for ii = 1:length(subSampledCloud)
+    for ii = 1:size(subSampledCloud,2)
         
         if (mod(ii,15) == 0)
             fprintf('%d of %d points\n',ii,length(subSampledCloud))
@@ -248,5 +269,12 @@ else
     measurements_out = measurements;
     descriptors_out = descriptors;
 end
-
+    if false % DEBUG
+        figure(3)
+        hold off
+        scatter3(cloud(2,:),cloud(1,:),-cloud(3,:),'b');hold on;scatter3(subSampledCloud(2,:),subSampledCloud(1,:),-subSampledCloud(3,:),'r+');scatter3(measurements_out(2,:),measurements_out(1,:),-measurements_out(3,:),'g^')
+        view(90,0)
+        axis equal
+        keyboard
+    end
 

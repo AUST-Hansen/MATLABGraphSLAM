@@ -1,11 +1,13 @@
-%function [measurementTimestamps, rangeMeasurements, correspondences,meas_ind,multibeamMeasurements,correspondences_mb] = cleanRealMeasurements(filename)
-clear all; clc;
+function [measurementTimestamps, rangeMeasurements, correspondences,meas_ind,multibeamMeasurements,correspondences_mb] = cleanRealMeasurements(filename)
+%clear all; clc;
 
-if(~exist('extractedDataWall.mat','file'))
+savedmatfile = 'extractedDataFullWall.mat';
+
+if(~exist(savedmatfile,'file'))
     M = csvread(filename,1,0);
-    save('extractedDataWall.mat','M','filename')
+    save(savedmatfile,'M','filename')
 else
-    load extractedDataWall.mat
+    load(savedmatfile)
 end
 
 [timeStamps, IA, IC] = unique(M(:,1));
@@ -26,6 +28,7 @@ XYZ = [northings, eastings, LatLonDepth(:,3)];
 
 size(timeSteps)
 
+
 if(~exist('c_i_t','var'))
     nBeams = 512;
     c_i_t = zeros(nBeams,length(timeSteps));
@@ -44,7 +47,7 @@ if(~exist('c_i_t','var'))
             fprintf('processed %3.1f of %3.1f scans\n',ii,length(timeSteps))
         end
     end
-    save('extractedDataWall.mat','M','filename','c_i_t')
+    save(savedmatfile,'M','filename','c_i_t')
 else
     nBeams = size(c_i_t,1);
 end
@@ -92,11 +95,11 @@ for qq = 1:2
     % window different passes
     discontinuityIndices = find(diff(timeSteps) > 100);
     nPasses = length(pointRanges) + 1;
-    
+    keyboard;
     pointCloud = pointCloud(:,1:pointCloudCounter-1);
     save(['wallSegmentPass' num2str(qq) '.mat'],'pointCloud');    
     tNavStart = 1;
-    tNavEnd = discontinuityIndices(1);
+    tNavEnd = length(timeSteps);%discontinuityIndices(1);
     pointStart = 1;
     if (isempty(pointRanges))
         pointEnd = pointCloudCounter-1;
