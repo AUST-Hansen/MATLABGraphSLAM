@@ -66,8 +66,10 @@ fprintf('Cleaning and formatting data...\n')
 %correspondences.c_i_t = lookForLoopClosure(correspondences.c_i_t,rangeMeasurements,measurementTimestamps,scanmatch_probThreshold);
 %--------------------------------------------------------------------------
 %% test submap construction
+tic
 Submaps = buildSubmaps(processDVL(dvl,dvlData(1:endIdx),true,false),euler_obs_t(:,1:endIdx),50,mbMeas, correspondences_mb);
-
+toc
+keyboard
 %LCobj = lookForLoopClosureReson(Submaps);
 LCobj = []
 %--------------------------------------------------------------------------

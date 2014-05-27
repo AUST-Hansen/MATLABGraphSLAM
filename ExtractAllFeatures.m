@@ -2,8 +2,8 @@ clear all; close all; clc;
 
 addpath featureExtraction
 
-tMax = 500;%8982;
-range = 200;
+tMax = 5000;%8982;
+range = 150;
 timeBtwRefs = 30; % in num of timesteps. Essentiall divide by 3 for dtime
 % this script breaks full wall data into chunks and processes them to
 % extract features
@@ -14,7 +14,7 @@ featureDescriptors = [];
 
 load extractedDataFullWall.mat
 
-for t = 100:range:tMax
+for t = 4600:range:tMax
     
     [meas,desc,corrs] = ExtractPseudomeasurements(M,c_i_t,timeBtwRefs,t,t+range);
     

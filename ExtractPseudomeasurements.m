@@ -111,7 +111,7 @@ firstmeas = min(subcit(subcit~=0));
 %%
 %figure;scatter3(XYZ(:,2),XYZ(:,1),-XYZ(:,3));axis equal
 %title('AUV trajectory in UTM and depth')
-
+keyboard
 % c_i_t for features
 
 featureCorrespondences = spalloc(nBeams,length(timeSteps),round((length(timeSteps)/spacing)*200));
@@ -131,15 +131,15 @@ for iRefFrame = startIndex+spacing:spacing:endIndex-spacing
         heading = Psi(ii);
         % IT WOULD BE REALLY NICE TO HAVE PITCH AND ROLL!!!!!!!!!!!
         i_R_v = Euler2RotMat(0,0,heading);
+        % clean scan
+        scan_t = rangeMeasurements(:,c_i_t(c_i_t(:,ii)~=0,ii)-firstmeas+1);
+        scan_t_clean = cleanScan(scan_t,20);
         
-        for jj = 1:arg.rangeskip:nBeams
-            measIdx = c_i_t(jj,ii)-firstmeas+1;
-            
-            if (measIdx > 0);
-                pointCloud(:,pointCloudCounter) = position + i_R_v*rangeMeasurements(:,measIdx);
-                pointCloudCounter = pointCloudCounter+1;
-            end
-        end
+
+        pointCloud(:,pointCloudCounter:pointCloudCounter + size(scan_t_clean,2)-1) = repmat(position,1,size(scan_t_clean,2)) + i_R_v*scan_t_clean;
+        pointCloudCounter = pointCloudCounter+size(scan_t_clean,2);
+
+
         
     
     
@@ -149,16 +149,17 @@ for iRefFrame = startIndex+spacing:spacing:endIndex-spacing
     % put into vehicle frame
     vRi = Euler2RotMat(0,0,Psi(iRefFrame))';
     pointCloudVehicleFrame = vRi*(pointCloudWorldFrame - repmat(XYZ(iRefFrame,:)',1,size(pointCloudWorldFrame,2)));
-    
+    % clean up cloud
+    %pointCloudVehicleFrame = cleanCloud(pointCloudVehicleFrame,'kNeighbors',30,'alpha',.6);
     
     % Extract pseudomeasurements
-    [measurements_t, descriptors_t] = extractFeaturesFromSubmap(pointCloudVehicleFrame(:,1:20:end),'Verbose',false,'minRadius',5,'maxRadius',10,'numRadii',4,'Sparsity',5,'PFHbins',4);
+    [measurements_t, descriptors_t] = extractFeaturesFromSubmap(pointCloudVehicleFrame(:,1:10:end),'Verbose',false,'minRadius',5,'maxRadius',9,'numRadii',4,'Sparsity',5,'PFHbins',4);
     featureMeasurements = [featureMeasurements measurements_t];
     featureDescriptors = [featureDescriptors descriptors_t];
     featureCorrespondences(1:size(measurements_t,2),iRefFrame) = (featureCounter+1:featureCounter+size(measurements_t,2))';
     featureCounter = featureCounter + size(measurements_t,2);
 
-    if(false)
+    if(true)
         figure(3);scatter3(XYZ(:,2),XYZ(:,1),-XYZ(:,3));axis equal
         hold on;
         title('AUV trajectory in UTM and depth')

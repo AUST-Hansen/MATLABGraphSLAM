@@ -64,11 +64,11 @@ normals = zeros(size(cloud));
 
   %% Precalculate all normals  
     fprintf('calculating normals...\n');
-    neighborIndices = rangesearch(cloud',cloud',Radius(1));
+    neighborIndices = rangesearch(cloud',cloud',Radius(end));
     for ii = 1:length(cloud)
         
         % weed out borders and spurious points
-        if(length(neighborIndices{ii})<(arg.MinNeighbors*Radius(1)))
+        if(length(neighborIndices{ii})<(arg.MinNeighbors))
             continue;
         end
         
@@ -101,9 +101,9 @@ normals = zeros(size(cloud));
         end
         
     end
-size(normals)
 
     %% Cache PFH info
+    fprintf('caching pfh info...\n');
 sparseIdx = 1;
 cacheflag = logical(zeros(length(cloud)));
 cache = zeros(length(subSampledCloud),length(subSampledCloud),3);
@@ -231,7 +231,7 @@ for i_rad = 1:length(Radius)
     % the mean Kullback-Leibler distance (divergence) as in "Aligning Point
     % Cloud Views using Persistent Feature Histograms" by Radu Rusu, et.al.
     fprintf('calculating divergence from mu-histogram...\n');
-    goodcorners = abs(KLdivergence -mean(KLdivergence)) > std(KLdivergence);
+    goodcorners = abs(KLdivergence -mean(KLdivergence)) > 5*std(KLdivergence);
     fprintf('extracting feature candidates...\n');
     measurements = measurements(:,goodcorners);
     measindices = measindices(goodcorners);
@@ -269,12 +269,17 @@ else
     measurements_out = measurements;
     descriptors_out = descriptors;
 end
-    if false % DEBUG
+    if true % DEBUG
         figure(3)
         hold off
-        scatter3(cloud(2,:),cloud(1,:),-cloud(3,:),'b');hold on;scatter3(subSampledCloud(2,:),subSampledCloud(1,:),-subSampledCloud(3,:),'r+');scatter3(measurements_out(2,:),measurements_out(1,:),-measurements_out(3,:),'g^')
+        keyboard
+        scatter3(cloud(2,:),cloud(1,:),-cloud(3,:),ones(1,size(cloud,2)),curvatures(1,:));hold on;scatter3(subSampledCloud(2,:),subSampledCloud(1,:),-subSampledCloud(3,:),'r+');scatter3(measurements_out(2,:),measurements_out(1,:),-measurements_out(3,:),'g^')
         view(90,0)
         axis equal
+        if(~isempty(descriptors_out))
+            figure(4)
+            plot(descriptors_out - repmat(mean(descriptors_out,2),1,size(descriptors_out,2)))
+        end
         keyboard
     end
 
