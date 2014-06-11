@@ -1,37 +1,38 @@
 clear all; close all; clc;
 
-load wallSegmentPass1.mat
+load pass1.mat
 pointCloud1 = pointCloud;
 %clear pointCloud
-load wallSegmentPass2.mat
+load pass2.mat
 pointCloud2 = pointCloud;
 clear pointCloud
 DEBUG = true;
 
-pointStart = 10000;
-pointEnd = 24000; %round(length(pointCloud)/10);
-pointStart2 = 8000;
-pointEnd2 = 25000; %round(length(pointCloud)/10);
+
+pointStart = 50000;
+pointEnd = 100000; %round(length(pointCloud)/10);
+pointStart2 = 102000;
+pointEnd2 = 152000; %round(length(pointCloud)/10);
 % pointStart = 17000;
 % pointEnd = 22000; %round(length(pointCloud)/10);
 % pointStart2 = 19000;
 % pointEnd2 = 23000; %round(length(pointCloud)/10);
-sparsity = 6;
+sparsity = 10;
 
 
 % focus on smaller, subsampled cloud for initial testing
-subCloud1 = pointCloud1(:,pointStart:sparsity:pointEnd) + .00*rand(size(pointCloud1(:,pointStart:sparsity:pointEnd)));
+subCloud1 = pointCloud1(:,pointStart:sparsity:pointEnd) + .0*rand(size(pointCloud1(:,pointStart:sparsity:pointEnd)));
 subCloud2 = pointCloud2(:,pointStart2:sparsity:pointEnd2) + .0*rand(size(pointCloud2(:,pointStart2:sparsity:pointEnd2)));
-subCloud1 = subCloud1 - repmat(mean(subCloud1,2),1,size(subCloud1,2));
-subCloud2 = subCloud2 - repmat(mean(subCloud2,2),1,size(subCloud2,2));
+%subCloud1 = subCloud1 - repmat(mean(subCloud1,2),1,size(subCloud1,2));
+%subCloud2 = subCloud2 - repmat(mean(subCloud2,2),1,size(subCloud2,2));
 sprsty = 1;
 
 % clean subclouds based on statistical surface characterization
-subCloud1 = cleanCloud(subCloud1,'kNeighbors',40,'alpha',1);
-subCloud2 = cleanCloud(subCloud2,'kNeighbors',40,'alpha',1);
+subCloud1 = cleanCloud(subCloud1,'kNeighbors',30,'alpha',1);
+subCloud2 = cleanCloud(subCloud2,'kNeighbors',30,'alpha',1);
 
 if (DEBUG)
-    figure
+    figure(1)
     offset = 0*ones(size(subCloud2));
     offset(3,:) = 0;
     showCloud2 = subCloud2+offset;
@@ -46,9 +47,9 @@ end
 %subCloud2 = subCloud2 - repmat(mean(subCloud2,2),1,size(subCloud2,2));
 %%
 tic
-[measurements1, descriptors1] = extractFeaturesFromSubmap(subCloud1,'Verbose',false,'minRadius',3,'maxRadius',7,'numRadii',4,'Sparsity',5,'PFHbins',4);
+[measurements1, descriptors1] = extractFeaturesFromSubmap(subCloud1,'Verbose',false,'minRadius',5,'maxRadius',10,'numRadii',5,'Sparsity',5,'PFHbins',4);
 toc
-[measurements2, descriptors2] = extractFeaturesFromSubmap(subCloud2,'Verbose',false,'minRadius',3,'maxRadius',7,'numRadii',4,'Sparsity',5,'PFHbins',4);
+[measurements2, descriptors2] = extractFeaturesFromSubmap(subCloud2,'Verbose',false,'minRadius',5,'maxRadius',10,'numRadii',5,'Sparsity',5,'PFHbins',4);
 
 %%
 map = figure();

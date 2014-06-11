@@ -19,7 +19,7 @@ inp.addOptional('MinNeighbors', 5, @(x)isscalar(x) && x > 0); % multiplier on ra
 
 inp.addOptional('Sparsity', 1, @(x)isscalar(x) && x > 0);
 
-inp.addOptional('MinCurve', .1, @(x)isscalar(x) && x > 0);
+inp.addOptional('MinCurve', .04, @(x)isscalar(x) && x > 0);
 
 inp.addOptional('MaxCurve', .3, @(x)isscalar(x) && x > 0);
 
@@ -58,8 +58,6 @@ topZ = maxZ - arg.VertMargin*Zrange;
 botZ = minZ + arg.VertMargin*Zrange;
 topX = maxX - arg.HorizMargin*Xrange;
 botX = minX + arg.HorizMargin*Xrange;
-subSampledCloud = cloud(:,cloud(3,:)<topZ & cloud(3,:)>botZ & cloud(1,:)<topX & cloud(1,:)>botX);
-subSampledCloud = subSampledCloud(:,1:arg.Sparsity:end);
 normals = zeros(size(cloud));
 
   %% Precalculate all normals  
@@ -88,8 +86,8 @@ normals = zeros(size(cloud));
         normals(:,ii) = normal;
         curvatures(1,ii) = s(3,3)/(s(3,3)+s(2,2));
         curvatures(2,ii) = s(3,3)/(s(3,3)+s(1,1));
-        curvatures(3,ii) = [0 0 1]*v(:,3)*sign([1 0 0]*v(:,3));
-        
+        curvatures(3,ii) = s(3,3)/(s(3,3)+s(2,2)+s(1,1)); %[0 0 1]*v(:,3)*sign([1 0 0]*v(:,3));
+
         if(false && arg.Verbose)
             scatter3(Preg(2,:),Preg(1,:),-Preg(3,:),'r');
             axis equal
@@ -101,7 +99,14 @@ normals = zeros(size(cloud));
         end
         
     end
-
+curvatureCheck = curvatures(3,:) > arg.MinCurve;
+%subSampledCloud = cloud(:,cloud(3,:)<topZ & cloud(3,:)>botZ & cloud(1,:)<topX & cloud(1,:)>botX) | curvatureCheck;
+% weed out flat points
+subSampledCloud = cloud(:,curvatureCheck);
+% impose margins
+subSampledCloud = subSampledCloud(:,subSampledCloud(3,:)<topZ & subSampledCloud(3,:)>botZ & subSampledCloud(1,:)<topX & subSampledCloud(1,:)>botX);
+%subSampledCloud = subSampledCloud(:,1:arg.Sparsity:end);
+%subCurvatures = subSampledCloud(:,1:arg.Sparsity:end);
     %% Cache PFH info
     fprintf('caching pfh info...\n');
 sparseIdx = 1;
@@ -226,12 +231,11 @@ for i_rad = 1:length(Radius)
     % Kullback-Leibler distance (divergence)
     fprintf('calculating divergence from mu-histogram...\n');
     KLdivergence = sum( (descriptors -muHists).*log((descriptors+eps)./(muHists +eps)));
-    
     % use distance metric to pull out features greater than one std away from
     % the mean Kullback-Leibler distance (divergence) as in "Aligning Point
     % Cloud Views using Persistent Feature Histograms" by Radu Rusu, et.al.
     fprintf('calculating divergence from mu-histogram...\n');
-    goodcorners = abs(KLdivergence -mean(KLdivergence)) > 5*std(KLdivergence);
+    goodcorners = abs(KLdivergence -mean(KLdivergence)) > 1*std(KLdivergence);
     fprintf('extracting feature candidates...\n');
     measurements = measurements(:,goodcorners);
     measindices = measindices(goodcorners);
@@ -269,7 +273,7 @@ else
     measurements_out = measurements;
     descriptors_out = descriptors;
 end
-    if true % DEBUG
+    if false % DEBUG
         figure(3)
         hold off
         keyboard

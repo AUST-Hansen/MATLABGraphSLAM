@@ -26,12 +26,17 @@ GSparams.iteration = 1;
 %% Extract data
 tStart = 0;
 tEnd = 2000;
+submaphalfwidth = 900;
 processedDataFileName = ['ProcessedData' num2str(tStart) '_' num2str(tEnd) '.mat'];
-if (~exist(processedDataFileName,'file')
+if (~exist(processedDataFileName,'file'))
+    fprintf('No processed data file found: Looking for raw data file...\n');
     if (~exist(savedfilename,'file'))
+        fprintf('Extracting raw data from csv...\n');
         ExtractedData = extractData(filename);
+        fprintf('saving to mat file\n');
         save(savedfilename,'ExtractedData');
     else
+        fprintf('MAT file found: Loading raw data from file...\n');
         load(savedfilename)
     end
     %% Process Data
@@ -41,10 +46,13 @@ if (~exist(processedDataFileName,'file')
     %       tStart
     %       tEnd
     %
-    ProcessedData = processData(ExtractedData,tStart,tEnd);
-    save(processedDataFileName,ProcessedData)
+    fprintf('Processing raw data...\n');
+    ProcessedData = processData(ExtractedData,tStart,tEnd,submaphalfwidth);
+    fprintf('Saving processed data...\n');
+    save(processedDataFileName,'ProcessedData')
     clear ExtractedData
 else
+    fprintf('Processed data found! Loading from file...\n');
     load(processedDataFileName)
 end
 

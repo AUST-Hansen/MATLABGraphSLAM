@@ -49,7 +49,7 @@ function ProcessedData = processData(ExtractedData,tStart,tEnd,subMapHalfWidth)
     for ii = 1 + subMapHalfWidth:subMapHalfWidth:size(ProcessedData.timeSteps,1)-subMapHalfWidth
        subMapRefFlag(ii) = 1;
        subMapIndexRange(1,ii) = c_i_t_clean(1,ii-subMapHalfWidth);
-       subMapIndexRange(2,ii) = max(c_i_t_clean(:,ii+subMapHalfWidth));
+       subMapIndexRange(2,ii) = max(max(c_i_t_clean(:,ii:ii+subMapHalfWidth)));
        submapIndex = submapIndex + 1; 
     end
     

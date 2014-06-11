@@ -1,4 +1,4 @@
-function [SLAMdata, otherData]GraphSLAMInitializeRD(PD)
+function [SLAMdata, otherData] = GraphSLAMInitializeRD(PD)
 
     xy = PD.Pos(1:2,:);
     uv = smooth(PD.DVL(1:2,:),20);
