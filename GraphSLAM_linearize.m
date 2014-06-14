@@ -183,7 +183,6 @@ for ii = 1:Nstates
             %expectedMeasurement = B_R_V'*(-[stateEstimate(1:2,ii); 0] + [0 0 eps]') ;
             % build covariance
             Qinv = 100*eye(3);
-
             xDiff = mapEstimate(1:3,j) - [stateEstimate(1:2,ii); 0];
             zHat = V_R_B*[xDiff];
             zMeas = rangeMeasurements(:,measIndex);
@@ -200,7 +199,7 @@ for ii = 1:Nstates
             %                     [0, 0,           0,0                   ,0                         ,0       ,0,0,  1]];
             %             H = [[-eye(2), zeros(2,4),  eye(2), [0;0] ];...
             %                     [0, 0,           0,0                   ,0                         ,0       ,0,0,  1]];
-            
+
             CovAdd = H'*Qinv*H;
             %CovAdd(end,end) = .01;
             %zetaAdd = H'*Qinv*(H*[stateEstimate(:,ii) ; mapEstimate(:,j)]);

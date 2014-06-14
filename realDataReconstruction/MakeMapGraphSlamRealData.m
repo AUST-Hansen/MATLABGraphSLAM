@@ -25,45 +25,54 @@ GSparams.iteration = 1;
 %
 %% Extract data
 tStart = 0;
-tEnd = 2000;
-submaphalfwidth = 900;
+tEnd = 5200;
+submaphalfwidth = 400;
 processedDataFileName = ['ProcessedData' num2str(tStart) '_' num2str(tEnd) '.mat'];
-if (~exist(processedDataFileName,'file'))
-    fprintf('No processed data file found: Looking for raw data file...\n');
-    if (~exist(savedfilename,'file'))
-        fprintf('Extracting raw data from csv...\n');
-        ExtractedData = extractData(filename);
-        fprintf('saving to mat file\n');
-        save(savedfilename,'ExtractedData');
-    else
-        fprintf('MAT file found: Loading raw data from file...\n');
-        load(savedfilename)
-    end
-    %% Process Data
-    %
-    %   Inputs:
-    %       ExtractedData
-    %       tStart
-    %       tEnd
-    %
-    fprintf('Processing raw data...\n');
-    ProcessedData = processData(ExtractedData,tStart,tEnd,submaphalfwidth);
-    fprintf('Saving processed data...\n');
-    save(processedDataFileName,'ProcessedData')
-    clear ExtractedData
+featureDataFileName = ['PDfeatures' num2str(tStart) '_' num2str(tEnd) '.mat'];
+if (exist(featureDataFileName))
+    load featureDataFileName
 else
-    fprintf('Processed data found! Loading from file...\n');
-    load(processedDataFileName)
+    if (~exist(processedDataFileName,'file'))
+        fprintf('No processed data file found: Looking for raw data file...\n');
+        if (~exist(savedfilename,'file'))
+            fprintf('Extracting raw data from csv...\n');
+            ExtractedData = extractData(filename);
+            fprintf('saving to mat file\n');
+            save(savedfilename,'ExtractedData');
+        else
+            fprintf('MAT file found: Loading raw data from file...\n');
+            load(savedfilename)
+        end
+        %% Process Data
+        %
+        %   Inputs:
+        %       ExtractedData
+        %       tStart
+        %       tEnd
+        %
+        fprintf('Processing raw data...\n');
+        ProcessedData = processData(ExtractedData,tStart,tEnd,submaphalfwidth);
+        fprintf('Saving processed data...\n');
+        save(processedDataFileName,'ProcessedData')
+        clear ExtractedData
+    else
+        fprintf('Processed data found! Loading from file...\n');
+        load(processedDataFileName)
+    end
+    PDfeatures = sweepSonarFeatures(ProcessedData);
+    save(featureDataFileName,'PDfeatures')
+    clear ProcessedData
 end
 
 % Extract position
 
-keyboard
+
 
 % OtherData contains data like rangeMeasurements, which are used often, by
 % many functions, but not changed during the course of GraphSLAM.
 %% Initialize SLAM
-[SLAMdata, OtherData] = GraphSLAMInitializeRD(ProcessedData); % RD = real data
+[SLAMdata, OtherData] = GraphSLAMInitializeRD(PDfeatures); % RD = real data
+
 SLAMdata = GraphSLAMLinearizeRD(SLAMdata,OtherData);
 SLAMdata = GraphSLAMReduceRD(SLAMdata,OtherData);
 SLAMdata = GRAPHSLAMSolveRD(SLAMdata,OtherData);

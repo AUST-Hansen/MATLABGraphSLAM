@@ -1,17 +1,19 @@
 function PDout = sweepSonarFeatures(PD)
 
    subMapHalfWidth = 20;
-   tStart = 2000;
-   tEnd = 6000;%length(PD.timeSteps);
+   tStart = 1;
+   tEnd = length(PD.timeSteps);
    tSkip = 1;
    PLOTS = false;
    % Max and min curvatures: hard-coded
-   MinCurve = .55;
+   MinCurve = .6;
    MaxCurve = 1.;
+   min2dCurve = .03; 
+   max2dCurve = .05;
    % Build initial submap
    subMap = [];
    %% feature extraction bins
-   c_i_t_features = zeros(50,tEnd-tStart);
+   c_i_t_features = zeros(20,tEnd-tStart+1);
    descriptors = [];
    featureCount = 0;
    while(isempty(subMap) || size(subMap,2) < 5000)
@@ -87,7 +89,7 @@ function PDout = sweepSonarFeatures(PD)
        end
        
        % filter out low curvatures
-       min2dCurve = .025; max2dCurve = .045;
+
        CurvyPoints2D = CurvyPoints(:,curvatures>min2dCurve&curvatures<max2dCurve);
        CurvyPoints2DVF = CurvyPointsVF(:,curvatures>min2dCurve&curvatures<max2dCurve);
        kappaCulled = kappaCandidates(curvatures>min2dCurve&curvatures<max2dCurve);
@@ -117,13 +119,16 @@ function PDout = sweepSonarFeatures(PD)
        grazingAngles = normalHeading - repmat(PD.Psi(iScan),1,size(normalHeading,2)) + pi/2;
        % 1D curvature
        % 2d curvature
-       descriptors = [descriptors [CurvyPoints2DVF;...
-                                   normalsCulled(3,:);...
-                                   grazingAngles;...
-                                   kappaCulled;...
-                                   curvesCulled]];
-       c_i_t_features(1:size(curvesCulled,2),iScan) = (featureCount+1:featureCount+size(curvesCulled,2))';
-       featureCount = featureCount + size(curvesCulled,2);
+
+       if (size(CurvyPoints2DVF,2) > 0)
+           descriptors = [descriptors [CurvyPoints2DVF;...
+               normalsCulled(3,:);...
+               grazingAngles;...
+               kappaCulled;...
+               curvesCulled]];
+           c_i_t_features(1:size(curvesCulled,2),iScan) = (featureCount+1:featureCount+size(curvesCulled,2))';
+           featureCount = featureCount + size(curvesCulled,2);
+       end
        [iScan size(curvesCulled,2)]
    end %for iScan
    
