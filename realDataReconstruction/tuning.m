@@ -70,12 +70,18 @@ idxInsideRadius = idx(dist<ball);
 
 matchcloud1 = cloud(:,dist<ball);
 matchcloud2 = cloud3(:,idxInsideRadius);
+[idx2 dist2] = knnsearch(cloud',cloud3');
+idxInsideRadius2 = idx2(dist2<ball);
+matchcloud1prime = cloud(:,idxInsideRadius2);
+matchcloud2prime = cloud3(:,dist2<ball);
     
 normalAgreement = abs(PDfeatures1.Descriptors(4,dist<ball)'-PDfeatures2.Descriptors(4,idxInsideRadius)')
 subplot(4,1,3)
 plotCloud(matchcloud1,5,'r',5)
 hold on
 plotCloud(matchcloud2,5,'b',5)
+plotCloud(matchcloud1prime,5,'y',5)
+plotCloud(matchcloud2prime,5,'c',5)
 axis manual
 axis(scale)
 title('possible matches')
@@ -88,6 +94,13 @@ axis(scale)
 title('possible matches windowed by normal')
 
 
+
+figure(6)
+plotCloud(matchcloud1,6,'r',5)
+hold on
+plotCloud(matchcloud2,6,'b',5)
+plotCloud(matchcloud1prime,6,'y',5)
+plotCloud(matchcloud2prime,6,'c',5)
 %% now compare descriptors
 figure(3); subplot(2,2,1); plot(abs(PDfeatures1.Descriptors(4,dist<ball)'-PDfeatures2.Descriptors(4,idxInsideRadius)')); hold on;
 %plot(PDfeatures2.Descriptors(4,idxInsideRadius)','r');

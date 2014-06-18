@@ -15,7 +15,7 @@ Omega(2,2) = 1e13;
 Omega(3,3) = 0;
 Omega(4,4) = 0;
 Omega(5,5) = 1e13;
-Omega(6,6) = 1; % TODO: reduce this
+Omega(6,6) = 1e13; % TODO: reduce this
 % ininitialize zeta
 zeta = zeros(SLAMdata.stateSize*SLAMdata.Nstates + SLAMdata.mapDimension*NmapFeatures,1);
 zeta(1:6) = [0 0 OtherData.inputs(1,1) 0 0 0]';
@@ -23,21 +23,24 @@ xhat = zeros(SLAMdata.stateSize,1);
 Gmat = zeros(SLAMdata.stateSize);
 %processNoise = diag([1e-10,1e-10,1e-9,1e-9,1e-9,1e-8]);
 processNoise = zeros(SLAMdata.stateSize);
-processNoise(1:2,1:2) = 1e-12*eye(2);
-processNoise(3,3) = 1e-4;
-processNoise(4,4) = 1e-4;
-processNoise(5,5) = 1e-8;     % gyro noise
-processNoise(end,end) = 1e-10; % bias driver
+processNoise(1:2,1:2) = 1e-7*eye(2);
+processNoise(3,3) = 1e-6;
+processNoise(4,4) = 1e-6;
+processNoise(5,5) = 1e-10;     % gyro noise
+processNoise(end,end) = 1e-8; % bias driver
 
 %% Motion model
 fprintf('\nMotion...\n')
-for ii = 1:100%SLAMdata.Nstates-1
+for ii = 1:SLAMdata.Nstates-1
     dT = (OtherData.timeSteps(ii+1) - OtherData.timeSteps(ii));
     
     %% Extract heading
     % nonlinear state update
-    [~, xHat] = ode45(@dStateDt,[0 dT],[stateEstimate(:,ii);OtherData.inputs(:,ii)]);
-    xhat = xHat(end,1:SLAMdata.stateSize)';
+    %[~, xHat] = ode45(@dStateDt,[0 dT],[stateEstimate(:,ii);OtherData.inputs(:,ii)]);
+    %xhat = xHat(end,1:SLAMdata.stateSize)';
+    dX = dStateDt(1,[stateEstimate(:,ii);OtherData.inputs(:,ii)])*dT;
+    xhat = stateEstimate(:,ii) + dX(1:SLAMdata.stateSize);
+    %[xhat-stateEstimate(:,ii)]
     % current state estimate
     Gmat = buildGmatrix(stateEstimate(:,ii),dT);
     % add information to Omega and zeta
@@ -119,12 +122,29 @@ for t = 1:SLAMdata.Nstates
         %end
         end % for jj
     end % if ~isempty
+    
+    QDVL = 1e-6;
+    QinvDVL = eye(2)*1/QDVL;
+    Hdvl = [0 0 1 0 0 0; 0 0 0 1 0 0];
+    zMeas = OtherData.DVL(1:2,t);
+    %zHat = Hdvl*stateEstimate(:,t);
+    CovAdd = Hdvl'*QinvDVL*Hdvl;
+    zetaAdd = Hdvl'*QinvDVL*(zMeas);
+    Omega((t-1)*SLAMdata.stateSize+1:(t)*SLAMdata.stateSize,(t-1)*SLAMdata.stateSize+1:(t)*SLAMdata.stateSize) = ...
+        Omega((t-1)*SLAMdata.stateSize+1:(t)*SLAMdata.stateSize,(t-1)*SLAMdata.stateSize+1:(t)*SLAMdata.stateSize) + ...
+        CovAdd;
+    zeta((t-1)*SLAMdata.stateSize+1:(t)*SLAMdata.stateSize) = zeta((t-1)*SLAMdata.stateSize+1:(t)*SLAMdata.stateSize) +...
+                    + zetaAdd;
+    
+    
     if (mod(t,500)==0)
         fprintf('%d of %d points...\n',t,SLAMdata.Nstates)
     end
 end % for t
 
-
+SLAMdataOut = SLAMdata;
+SLAMdataOut.Omega = Omega;
+SLAMdataOut.zeta = zeta;
 end
 
 %% State-specific functions
@@ -138,9 +158,9 @@ end
         
         deriv = zeros(size(stateAndInputs));
         deriv(1:2) = b_R_v*stateAndInputs(3:4);
-        deriv(3:4) = [stateAndInputs(7); 0] - stateAndInputs(3:4);
+        deriv(3:4) = .001*[stateAndInputs(7); 0] - stateAndInputs(3:4);
         deriv(5) = (stateAndInputs(8) - stateAndInputs(6));
-        deriv(6) = 0;%-.00001*stateAndInputs(6);
+        deriv(6) = -.1*stateAndInputs(6);
         % zeros for everything else
     end
 
@@ -154,7 +174,7 @@ end
         Gmat(1:2,3:4) = R*dT;
         Gmat(1:2,5) = dT*([-sPsi, -cPsi; cPsi, -sPsi]*[u; v]);
         Gmat(3:4,3:4) = eye(2);
-        Gmat(5:6,5:6) = eye(2);
+        Gmat(5:6,5:6) = .9*eye(2);
         Gmat(5,6) = -dT;
     end
 

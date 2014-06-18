@@ -25,12 +25,12 @@ GSparams.iteration = 1;
 %
 %% Extract data
 tStart = 0;
-tEnd = 5200;
+tEnd = 2000;
 submaphalfwidth = 400;
 processedDataFileName = ['ProcessedData' num2str(tStart) '_' num2str(tEnd) '.mat'];
 featureDataFileName = ['PDfeatures' num2str(tStart) '_' num2str(tEnd) '.mat'];
 if (exist(featureDataFileName))
-    load featureDataFileName
+    load(featureDataFileName)
 else
     if (~exist(processedDataFileName,'file'))
         fprintf('No processed data file found: Looking for raw data file...\n');
@@ -75,7 +75,17 @@ end
 
 SLAMdata = GraphSLAMLinearizeRD(SLAMdata,OtherData);
 SLAMdata = GraphSLAMReduceRD(SLAMdata,OtherData);
-SLAMdata = GRAPHSLAMSolveRD(SLAMdata,OtherData);
+SLAMdata = GraphSLAMSolveRD(SLAMdata,OtherData);
+%Mu = SLAMdata.Omega\SLAMdata.zeta;
+Mu = SLAMdata.mu;
+stateHist = reshape(Mu(1:SLAMdata.Nstates*SLAMdata.stateSize),6,[]);
+MapEsts = reshape(Mu(SLAMdata.Nstates*SLAMdata.stateSize+1:end),4,[]);
+figure(3);plot(stateHist(2,:),stateHist(1,:));title('x vs y'); axis equal
+hold on; scatter(MapEsts(2,:),MapEsts(1,:))
+figure(4); plot(stateHist(3:4,:)'); title('estimated velocity')
+figure(5); plot(stateHist(5,:)');hold on;plot(PDfeatures.Psi-PDfeatures.Psi(1),'g') ;title('heading')
+figure(6); plot(stateHist(6,:)'); title('estimated bias') 
+keyboard
 %% run SLAM
 while (GSparams.iteration < GSparams.MAX_ITER)
     % Track innovations

@@ -1,7 +1,7 @@
 function [SLAMdata, OtherData] = GraphSLAMInitializeRD(PD)
 
 DEBUG = true;
-corruptDataWithMotion = true;
+corruptDataWithMotion = false;
 xy = 0*PD.Pos(1:2,:);
 uv = PD.DVL(1:2,:);
 for ii = 2:size(PD.timeSteps,1);
@@ -75,5 +75,6 @@ OtherData.Descriptors = PD.Descriptors;
         hold on
         points = reshape(SLAMdata.mu(SLAMdata.stateSize*15570+1:end),SLAMdata.mapDimension,[]);
         scatter3(points(2,:),points(1,:),-points(3,:),3*ones(1,size(points,2)),'g')
+        view(130,16)
         title('Initial estimate')
     end
