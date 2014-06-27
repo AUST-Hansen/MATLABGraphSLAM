@@ -39,7 +39,12 @@ if(~exist('PDfeatures3500_5200.mat','file'))
 else
     load PDfeatures3500_5200.mat
 end
-
+CORRUPT_DATA = false;
+if (CORRUPT_DATA)
+    PDfeatures.Pos(1,:) = PDfeatures.Pos(1,:) + 40;
+    PDfeatures.Pos(2,:) = PDfeatures.Pos(2,:) + 40;
+    PDfeatures.Psi = PDfeatures.Psi + linspace(1,1,size(PDfeatures.Psi,1))';
+end
 cloud3 = buildFeatureMapFromProcessedData(PDfeatures,1,size(PDfeatures.c_i_t,2));
 cloud4 = buildMapFromProcessedData(ProcessedData,1,size(ProcessedData.c_i_t,2));
 %%
@@ -64,31 +69,48 @@ clear PDfeatures
 % just overlap
 
 % all points in second cloud within five meters of first
-ball = 10;
-[idx dist] = knnsearch(cloud3',cloud');
-idxInsideRadius = idx(dist<ball);
-
-matchcloud1 = cloud(:,dist<ball);
-matchcloud2 = cloud3(:,idxInsideRadius);
-[idx2 dist2] = knnsearch(cloud',cloud3');
+ball = 30;
+W = diag([.5 .5 20 30]);
+hypercloud = W*[cloud; PDfeatures1.Descriptors(4,:)];
+hypercloud3 = W*[cloud3; PDfeatures2.Descriptors(4,:)];
+% Malanhobis distance metric
+[idx dist] = knnsearch(hypercloud3',hypercloud');
+ idxInsideRadius = idx(dist<ball);
+ matchcloud1 = cloud(:,dist<ball);
+ matchcloud2 = cloud3(:,idxInsideRadius);
+[idx2 dist2] = knnsearch(hypercloud(:,dist<ball)',hypercloud3(:,idxInsideRadius)');
 idxInsideRadius2 = idx2(dist2<ball);
-matchcloud1prime = cloud(:,idxInsideRadius2);
-matchcloud2prime = cloud3(:,dist2<ball);
+matchcloud1p = matchcloud1(:,idxInsideRadius2);
+matchcloud2p = matchcloud2(:,dist2<ball);
+% [idx dist] = knnsearch(cloud3',cloud');
+% idxCloud1 = 1:length(idx);
+% idxCloud1 = idxCloud1(dist<ball);
+% idxInsideRadius = idx(dist<ball);
+% matchcloud1 = cloud(:,dist<ball);
+% matchcloud2 = cloud3(:,idxInsideRadius);
+% [idx2 dist2] = knnsearch(matchcloud1',matchcloud2');
+% idxCloud2 = 1:length(idx2);
+% idxCloud2 = idxCloud2(dist2<ball);
+% idxInsideRadius2 = idx2(dist2<ball);
+% matchcloud1prime = matchcloud1(:,idxInsideRadius2);
+% matchcloud2prime = matchcloud2(:,dist2<ball);
     
-normalAgreement = abs(PDfeatures1.Descriptors(4,dist<ball)'-PDfeatures2.Descriptors(4,idxInsideRadius)')
+normalAgreement = abs(PDfeatures1.Descriptors(4,dist<ball)'-PDfeatures2.Descriptors(4,idxInsideRadius)');
 subplot(4,1,3)
 plotCloud(matchcloud1,5,'r',5)
 hold on
 plotCloud(matchcloud2,5,'b',5)
-plotCloud(matchcloud1prime,5,'y',5)
-plotCloud(matchcloud2prime,5,'c',5)
+%plotCloud(matchcloud1prime,5,'y',5)
+%plotCloud(matchcloud2prime,5,'c',5)
 axis manual
 axis(scale)
 title('possible matches')
 subplot(4,1,4)
-plotCloud(matchcloud1(:,normalAgreement<.15),5,'r',5)
+plotCloud(matchcloud1p,5,'r',5)
 hold on
-plotCloud(matchcloud2(:,normalAgreement<.15),5,'b',5)
+plotCloud(matchcloud2p,5,'b',5)
+hold on
+line([matchcloud1p(2,:);matchcloud2p(2,:)],[matchcloud1p(1,:);matchcloud2p(1,:)],-[matchcloud1p(3,:);matchcloud2p(3,:)])
 axis manual
 axis(scale)
 title('possible matches windowed by normal')
@@ -99,8 +121,8 @@ figure(6)
 plotCloud(matchcloud1,6,'r',5)
 hold on
 plotCloud(matchcloud2,6,'b',5)
-plotCloud(matchcloud1prime,6,'y',5)
-plotCloud(matchcloud2prime,6,'c',5)
+plotCloud(matchcloud1p,6,'y',5)
+plotCloud(matchcloud2p,6,'c',5)
 %% now compare descriptors
 figure(3); subplot(2,2,1); plot(abs(PDfeatures1.Descriptors(4,dist<ball)'-PDfeatures2.Descriptors(4,idxInsideRadius)')); hold on;
 %plot(PDfeatures2.Descriptors(4,idxInsideRadius)','r');

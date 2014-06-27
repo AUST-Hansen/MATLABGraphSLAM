@@ -25,7 +25,7 @@ GSparams.iteration = 1;
 %
 %% Extract data
 tStart = 0;
-tEnd = 2000;
+tEnd = 5200;
 submaphalfwidth = 400;
 processedDataFileName = ['ProcessedData' num2str(tStart) '_' num2str(tEnd) '.mat'];
 featureDataFileName = ['PDfeatures' num2str(tStart) '_' num2str(tEnd) '.mat'];
